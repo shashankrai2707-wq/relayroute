@@ -51,7 +51,7 @@ app.post('/api/parcels/create', async (req, res) => {
   }
 });
 
-// 3. उपलब्ध पार्सल खोजने का रूट (राइडर के लिए)
+// 3. उपलब्ध पार्सल खोजने का रूट (राइडर)
 app.get('/api/parcels/available', async (req, res) => {
   try {
     const result = await pool.query(
@@ -63,7 +63,7 @@ app.get('/api/parcels/available', async (req, res) => {
   }
 });
 
-// 4. राइडर द्वारा पार्सल स्वीकार (Accept) करने का रूट
+// 4. पार्सल स्वीकार (Accept) करने का रूट
 app.post('/api/parcels/accept', async (req, res) => {
   try {
     const parcel_id = req.body.parcel_id ? req.body.parcel_id.trim() : "";
@@ -121,6 +121,27 @@ app.post('/api/parcels/verify-delivery', async (req, res) => {
     res.json({ 
       success: true, 
       message: `🎉 डिलीवरी सफल! ₹${parcel.delivery_fee} का भुगतान राइडर खाते में प्रोसेस कर दिया गया।` 
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 7. वॉलेट और अर्निंग डेटा रूट (नया)
+app.get('/api/rider/wallet', async (req, res) => {
+  try {
+    const deliveredResult = await pool.query(
+      "SELECT * FROM parcels WHERE status = 'delivered' ORDER BY created_at DESC;"
+    );
+    const parcels = deliveredResult.rows;
+
+    const totalEarnings = parcels.reduce((sum, item) => sum + Number(item.delivery_fee || 0), 0);
+
+    res.json({
+      success: true,
+      totalEarnings,
+      completedCount: parcels.length,
+      history: parcels
     });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });

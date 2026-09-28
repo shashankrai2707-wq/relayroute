@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, TextInput, TouchableOpacity, ScrollView, SafeAreaView, Alert, FlatList } from 'react-native';
+import { StyleSheet, Text, View, TextInput, TouchableOpacity, ScrollView, SafeAreaView, Alert } from 'react-native';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('send'); // 'send', 'explore', 'verify'
+  const [activeTab, setActiveTab] = useState('send'); // 'send', 'explore', 'verify', 'wallet'
   
   // सेंडर स्टेट्स
   const [category, setCategory] = useState('दस्तावेज़ (Documents)');
@@ -14,13 +14,15 @@ export default function App() {
 
   // राइडर डिस्कवरी स्टेट्स
   const [availableParcels, setAvailableParcels] = useState([]);
-  const [loading, setLoading] = useState(false);
 
   // वेरिफिकेशन स्टेट्स
   const [parcelId, setParcelId] = useState('');
   const [otp, setOtp] = useState('');
   const [verifyType, setVerifyType] = useState('pickup');
   const [verifyMsg, setVerifyMsg] = useState('');
+
+  // वॉलेट स्टेट्स
+  const [walletData, setWalletData] = useState({ totalEarnings: 0, completedCount: 0, history: [] });
 
   const API_URL = 'https://personality-customise-amber-seed.trycloudflare.com';
 
@@ -30,9 +32,7 @@ export default function App() {
     'bypass-tunnel-reminder': '1'
   };
 
-  // उपलब्ध पार्सल लोड करना
   const fetchAvailableParcels = async () => {
-    setLoading(true);
     try {
       const response = await fetch(`${API_URL}/api/parcels/available`, { headers: reqHeaders });
       const data = await response.json();
@@ -41,15 +41,24 @@ export default function App() {
       }
     } catch (err) {
       Alert.alert('त्रुटि', 'पार्सल लोड नहीं हो सके');
-    } finally {
-      setLoading(false);
+    }
+  };
+
+  const fetchWalletData = async () => {
+    try {
+      const response = await fetch(`${API_URL}/api/rider/wallet`, { headers: reqHeaders });
+      const data = await response.json();
+      if (data.success) {
+        setWalletData(data);
+      }
+    } catch (err) {
+      Alert.alert('त्रुटि', 'वॉलेट डेटा लोड नहीं हो सका');
     }
   };
 
   useEffect(() => {
-    if (activeTab === 'explore') {
-      fetchAvailableParcels();
-    }
+    if (activeTab === 'explore') fetchAvailableParcels();
+    if (activeTab === 'wallet') fetchWalletData();
   }, [activeTab]);
 
   const handleBooking = async () => {
@@ -121,6 +130,9 @@ export default function App() {
       const data = await response.json();
       if (data.success) {
         setVerifyMsg(data.message);
+        if (verifyType === 'delivery') {
+          fetchWalletData();
+        }
       } else {
         setVerifyMsg('त्रुटि: ' + data.error);
       }
@@ -147,13 +159,19 @@ export default function App() {
           style={[styles.tab, activeTab === 'explore' && styles.activeTab]} 
           onPress={() => setActiveTab('explore')}
         >
-          <Text style={[styles.tabText, activeTab === 'explore' && styles.activeTabText]}>पार्सल खोजें</Text>
+          <Text style={[styles.tabText, activeTab === 'explore' && styles.activeTabText]}>खोजें</Text>
         </TouchableOpacity>
         <TouchableOpacity 
           style={[styles.tab, activeTab === 'verify' && styles.activeTab]} 
           onPress={() => setActiveTab('verify')}
         >
           <Text style={[styles.tabText, activeTab === 'verify' && styles.activeTabText]}>OTP</Text>
+        </TouchableOpacity>
+        <TouchableOpacity 
+          style={[styles.tab, activeTab === 'wallet' && styles.activeTab]} 
+          onPress={() => setActiveTab('wallet')}
+        >
+          <Text style={[styles.tabText, activeTab === 'wallet' && styles.activeTabText]}>वॉलेट</Text>
         </TouchableOpacity>
       </View>
 
@@ -203,7 +221,7 @@ export default function App() {
 
             {availableParcels.length === 0 ? (
               <View style={styles.emptyBox}>
-                <Text style={{ color: '#6B7280' }}>फिलहाल कोई पार्सल उपलब्ध नहीं है।</Text>
+                <Text style={{ color: '#6B7280' }}>फिलहाल कोई नया पार्सल उपलब्ध नहीं है।</Text>
               </View>
             ) : (
               availableParcels.map((item) => (
@@ -275,6 +293,41 @@ export default function App() {
             ) : null}
           </View>
         )}
+
+        {activeTab === 'wallet' && (
+          <View>
+            {/* वॉलेट समरी कार्ड */}
+            <View style={styles.walletCard}>
+              <Text style={styles.walletTitle}>कुल कमाई (Total Earnings)</Text>
+              <Text style={styles.walletBalance}>₹{walletData.totalEarnings}</Text>
+              <Text style={styles.walletSub}>सफल डिलीवरी: {walletData.completedCount}</Text>
+            </View>
+
+            <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#1F2937', marginBottom: 12 }}>
+              डिलीवरी हिस्ट्री
+            </Text>
+
+            {walletData.history.length === 0 ? (
+              <View style={styles.emptyBox}>
+                <Text style={{ color: '#6B7280' }}>अभी तक कोई डिलीवरी पूरी नहीं हुई है।</Text>
+              </View>
+            ) : (
+              walletData.history.map((item) => (
+                <View key={item.id} style={styles.historyCard}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontWeight: 'bold', color: '#111827', fontSize: 14 }}>
+                      {item.pickup_address} → {item.drop_address}
+                    </Text>
+                    <Text style={{ color: '#6B7280', fontSize: 11, marginTop: 4 }}>
+                      पार्सल ID: {item.id.slice(0, 8)}...
+                    </Text>
+                  </View>
+                  <Text style={styles.historyFee}>+₹{item.delivery_fee}</Text>
+                </View>
+              ))
+            )}
+          </View>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -288,7 +341,7 @@ const styles = StyleSheet.create({
   tabContainer: { flexDirection: 'row', backgroundColor: '#FFF', borderBottomWidth: 1, borderColor: '#E5E7EB' },
   tab: { flex: 1, paddingVertical: 14, alignItems: 'center' },
   activeTab: { borderBottomWidth: 2, borderColor: '#4F46E5' },
-  tabText: { color: '#6B7280', fontWeight: '600', fontSize: 14 },
+  tabText: { color: '#6B7280', fontWeight: '600', fontSize: 13 },
   activeTabText: { color: '#4F46E5' },
   content: { padding: 16 },
   card: { backgroundColor: '#FFF', padding: 16, borderRadius: 12, elevation: 2 },
@@ -319,5 +372,11 @@ const styles = StyleSheet.create({
   routeText: { fontSize: 14, color: '#374151', marginVertical: 2 },
   weightText: { fontSize: 12, color: '#6B7280', marginTop: 4 },
   acceptBtn: { marginTop: 12, backgroundColor: '#4F46E5', padding: 10, borderRadius: 8, alignItems: 'center' },
-  acceptBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 13 }
+  acceptBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 13 },
+  walletCard: { backgroundColor: '#1E1B4B', padding: 20, borderRadius: 16, marginBottom: 20, elevation: 4 },
+  walletTitle: { color: '#C7D2FE', fontSize: 13, fontWeight: '600' },
+  walletBalance: { color: '#FFF', fontSize: 32, fontWeight: 'bold', marginVertical: 6 },
+  walletSub: { color: '#A5B4FC', fontSize: 12 },
+  historyCard: { backgroundColor: '#FFF', padding: 14, borderRadius: 10, marginBottom: 10, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', elevation: 1 },
+  historyFee: { color: '#059669', fontWeight: 'bold', fontSize: 16 }
 });
