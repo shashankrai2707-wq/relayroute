@@ -14,7 +14,7 @@ const pool = new Pool({
   port: 5432,
 });
 
-// 1. डिफ़ॉल्ट यूज़र रूट
+// 1. Default User Route
 app.get('/api/user/default', async (req, res) => {
   try {
     let result = await pool.query("SELECT * FROM users LIMIT 1;");
@@ -30,7 +30,7 @@ app.get('/api/user/default', async (req, res) => {
   }
 });
 
-// 2. पार्सल बुक करने का रूट
+// 2. Parcel Booking Route
 app.post('/api/parcels/create', async (req, res) => {
   try {
     const { sender_id, category, weight_kg, pickup_address, drop_address, receiver_name, receiver_phone, delivery_fee } = req.body;
@@ -51,7 +51,21 @@ app.post('/api/parcels/create', async (req, res) => {
   }
 });
 
-// 3. उपलब्ध पार्सल खोजने का रूट (राइडर)
+// 3. Sender Tracking API (Naya Endpoint)
+app.get('/api/parcels/track/:id', async (req, res) => {
+  try {
+    const parcelId = req.params.id.trim();
+    const result = await pool.query("SELECT * FROM parcels WHERE id = $1;", [parcelId]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Parcel nahi mila' });
+    }
+    res.json({ success: true, parcel: result.rows[0] });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 4. Available Parcels Route (Rider)
 app.get('/api/parcels/available', async (req, res) => {
   try {
     const result = await pool.query(
@@ -63,7 +77,7 @@ app.get('/api/parcels/available', async (req, res) => {
   }
 });
 
-// 4. पार्सल स्वीकार (Accept) करने का रूट
+// 5. Accept Parcel Route
 app.post('/api/parcels/accept', async (req, res) => {
   try {
     const parcel_id = req.body.parcel_id ? req.body.parcel_id.trim() : "";
@@ -74,7 +88,7 @@ app.post('/api/parcels/accept', async (req, res) => {
   }
 });
 
-// 5. पिकअप OTP वेरिफिकेशन
+// 6. Pickup OTP Verification
 app.post('/api/parcels/verify-pickup', async (req, res) => {
   try {
     const parcel_id = req.body.parcel_id ? req.body.parcel_id.trim() : "";
@@ -97,7 +111,7 @@ app.post('/api/parcels/verify-pickup', async (req, res) => {
   }
 });
 
-// 6. डिलीवरी OTP वेरिफिकेशन
+// 7. Delivery OTP Verification
 app.post('/api/parcels/verify-delivery', async (req, res) => {
   try {
     const parcel_id = req.body.parcel_id ? req.body.parcel_id.trim() : "";
@@ -127,14 +141,13 @@ app.post('/api/parcels/verify-delivery', async (req, res) => {
   }
 });
 
-// 7. वॉलेट और अर्निंग डेटा रूट (नया)
+// 8. Rider Wallet Route
 app.get('/api/rider/wallet', async (req, res) => {
   try {
     const deliveredResult = await pool.query(
       "SELECT * FROM parcels WHERE status = 'delivered' ORDER BY created_at DESC;"
     );
     const parcels = deliveredResult.rows;
-
     const totalEarnings = parcels.reduce((sum, item) => sum + Number(item.delivery_fee || 0), 0);
 
     res.json({

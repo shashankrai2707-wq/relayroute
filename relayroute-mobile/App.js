@@ -2,26 +2,32 @@ import React, { useState, useEffect } from 'react';
 import { StyleSheet, Text, View, TextInput, TouchableOpacity, ScrollView, SafeAreaView, Alert, Linking } from 'react-native';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('send'); // 'send', 'explore', 'verify', 'wallet'
+  const [activeTab, setActiveTab] = useState('send'); // 'send', 'track', 'explore', 'verify', 'wallet'
   
-  // सेंडर स्टेट्स
+  // Sender States
   const [category, setCategory] = useState('दस्तावेज़ (Documents)');
   const [weight, setWeight] = useState('2.0');
   const [fee, setFee] = useState('250');
   const [pickup, setPickup] = useState('सेक्टर 62, नोएडा');
   const [drop, setDrop] = useState('एमजी रोड, आगरा');
+  const [receiverName, setReceiverName] = useState('सुरेश कुमार');
+  const [receiverPhone, setReceiverPhone] = useState('9876543210');
   const [bookingData, setBookingData] = useState(null);
 
-  // राइडर डिस्कवरी स्टेट्स
+  // Tracking States
+  const [trackParcelId, setTrackParcelId] = useState('');
+  const [trackedParcel, setTrackedParcel] = useState(null);
+
+  // Rider Discovery States
   const [availableParcels, setAvailableParcels] = useState([]);
 
-  // वेरिफिकेशन स्टेट्स
+  // Verification States
   const [parcelId, setParcelId] = useState('');
   const [otp, setOtp] = useState('');
   const [verifyType, setVerifyType] = useState('pickup');
   const [verifyMsg, setVerifyMsg] = useState('');
 
-  // वॉलेट स्टेट्स
+  // Wallet States
   const [walletData, setWalletData] = useState({ totalEarnings: 0, completedCount: 0, history: [] });
 
   const API_URL = 'https://personality-customise-amber-seed.trycloudflare.com';
@@ -32,28 +38,43 @@ export default function App() {
     'bypass-tunnel-reminder': '1'
   };
 
-  // गूगल मैप्स खोलने का फ़ंक्शन
-  const openInMaps = (address) => {
-    const encoded = encodeURIComponent(address);
-    const url = `https://www.google.com/maps/search/?api=1&query=${encoded}`;
-    Linking.openURL(url).catch(() => Alert.alert('एरर', 'गूगल मैप्स नहीं खोला जा सका'));
+  // संचार (Communication) फ़ंक्शंस
+  const makeCall = (phone) => {
+    if (!phone) return Alert.alert('त्रुटि', 'फोन नंबर उपलब्ध नहीं है');
+    Linking.openURL(`tel:${phone}`).catch(() => Alert.alert('एरर', 'कॉल नहीं की जा सकी'));
   };
 
-  // पूरा रूट (पिकअप से ड्रॉप) नेविगेट करने का फ़ंक्शन
+  const sendSMS = (phone, msg = 'नमस्ते, यह RelayRoute डिलीवरी के संबंध में है।') => {
+    if (!phone) return Alert.alert('त्रुटि', 'फोन नंबर उपलब्ध नहीं है');
+    Linking.openURL(`sms:${phone}?body=${encodeURIComponent(msg)}`).catch(() => Alert.alert('एरर', 'SMS ऐप नहीं खुला'));
+  };
+
+  const openWhatsApp = (phone, msg = 'नमस्ते, RelayRoute पार्सल के संबंध में संपर्क कर रहे हैं।') => {
+    if (!phone) return Alert.alert('त्रुटि', 'फोन नंबर उपलब्ध नहीं है');
+    const cleanPhone = phone.replace(/[^0-9]/g, '');
+    const fullPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
+    Linking.openURL(`whatsapp://send?phone=${fullPhone}&text=${encodeURIComponent(msg)}`).catch(() => {
+      Alert.alert('व्हाट्सएप नहीं मिला', 'फोन में व्हाट्सएप ऐप इंस्टॉल नहीं है या नंबर अमान्य है');
+    });
+  };
+
+  // मैप्स नेविगेशन
+  const openInMaps = (address) => {
+    const encoded = encodeURIComponent(address);
+    Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${encoded}`).catch(() => Alert.alert('एरर', 'गूगल मैप्स नहीं खुला'));
+  };
+
   const openRouteInMaps = (origin, destination) => {
     const encodedOrigin = encodeURIComponent(origin);
     const encodedDest = encodeURIComponent(destination);
-    const url = `https://www.google.com/maps/dir/?api=1&origin=${encodedOrigin}&destination=${encodedDest}&travelmode=driving`;
-    Linking.openURL(url).catch(() => Alert.alert('एरर', 'गूगल मैप्स नहीं खोला जा सका'));
+    Linking.openURL(`https://www.google.com/maps/dir/?api=1&origin=${encodedOrigin}&destination=${encodedDest}&travelmode=driving`).catch(() => Alert.alert('एरर', 'गूगल मैप्स नहीं खुला'));
   };
 
   const fetchAvailableParcels = async () => {
     try {
       const response = await fetch(`${API_URL}/api/parcels/available`, { headers: reqHeaders });
       const data = await response.json();
-      if (data.success) {
-        setAvailableParcels(data.parcels);
-      }
+      if (data.success) setAvailableParcels(data.parcels);
     } catch (err) {
       Alert.alert('त्रुटि', 'पार्सल लोड नहीं हो सके');
     }
@@ -63,17 +84,35 @@ export default function App() {
     try {
       const response = await fetch(`${API_URL}/api/rider/wallet`, { headers: reqHeaders });
       const data = await response.json();
-      if (data.success) {
-        setWalletData(data);
-      }
+      if (data.success) setWalletData(data);
     } catch (err) {
       Alert.alert('त्रुटि', 'वॉलेट डेटा लोड नहीं हो सका');
+    }
+  };
+
+  const fetchTrackStatus = async (idToTrack) => {
+    const id = (idToTrack || trackParcelId).trim();
+    if (!id) {
+      Alert.alert('ध्यान दें', 'Parcel ID दर्ज करें');
+      return;
+    }
+    try {
+      const response = await fetch(`${API_URL}/api/parcels/track/${id}`, { headers: reqHeaders });
+      const data = await response.json();
+      if (data.success) {
+        setTrackedParcel(data.parcel);
+      } else {
+        Alert.alert('त्रुटि', data.error);
+      }
+    } catch (err) {
+      Alert.alert('एरर', 'ट्रैकिंग स्टेटस लोड नहीं हो सका');
     }
   };
 
   useEffect(() => {
     if (activeTab === 'explore') fetchAvailableParcels();
     if (activeTab === 'wallet') fetchWalletData();
+    if (activeTab === 'track' && trackParcelId) fetchTrackStatus(trackParcelId);
   }, [activeTab]);
 
   const handleBooking = async () => {
@@ -90,8 +129,8 @@ export default function App() {
           weight_kg: parseFloat(weight),
           pickup_address: pickup,
           drop_address: drop,
-          receiver_name: 'सुरेश कुमार',
-          receiver_phone: '9876543210',
+          receiver_name: receiverName,
+          receiver_phone: receiverPhone,
           delivery_fee: parseFloat(fee)
         })
       });
@@ -100,7 +139,8 @@ export default function App() {
       if (data.success) {
         setBookingData(data.parcel);
         setParcelId(data.parcel.id);
-        Alert.alert('सफल!', 'पार्सल सफलतापूर्वक बुक हो गया है।');
+        setTrackParcelId(data.parcel.id);
+        Alert.alert('सफल!', 'पार्सल बुक हो गया। अब आप इसे ट्रैक टैब में देख सकते हैं।');
       } else {
         Alert.alert('त्रुटि', data.error || 'बुकिंग नहीं हो सकी');
       }
@@ -145,15 +185,18 @@ export default function App() {
       const data = await response.json();
       if (data.success) {
         setVerifyMsg(data.message);
-        if (verifyType === 'delivery') {
-          fetchWalletData();
-        }
+        if (verifyType === 'delivery') fetchWalletData();
       } else {
         setVerifyMsg('त्रुटि: ' + data.error);
       }
     } catch (err) {
       setVerifyMsg('कनेक्शन एरर');
     }
+  };
+
+  const getStepActive = (stepStatus, currentStatus) => {
+    const levels = { 'requested': 1, 'accepted': 2, 'in_transit': 3, 'delivered': 4 };
+    return levels[currentStatus] >= levels[stepStatus];
   };
 
   return (
@@ -164,33 +207,25 @@ export default function App() {
       </View>
 
       <View style={styles.tabContainer}>
-        <TouchableOpacity 
-          style={[styles.tab, activeTab === 'send' && styles.activeTab]} 
-          onPress={() => setActiveTab('send')}
-        >
+        <TouchableOpacity style={[styles.tab, activeTab === 'send' && styles.activeTab]} onPress={() => setActiveTab('send')}>
           <Text style={[styles.tabText, activeTab === 'send' && styles.activeTabText]}>भेजें</Text>
         </TouchableOpacity>
-        <TouchableOpacity 
-          style={[styles.tab, activeTab === 'explore' && styles.activeTab]} 
-          onPress={() => setActiveTab('explore')}
-        >
+        <TouchableOpacity style={[styles.tab, activeTab === 'track' && styles.activeTab]} onPress={() => setActiveTab('track')}>
+          <Text style={[styles.tabText, activeTab === 'track' && styles.activeTabText]}>ट्रैक</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[styles.tab, activeTab === 'explore' && styles.activeTab]} onPress={() => setActiveTab('explore')}>
           <Text style={[styles.tabText, activeTab === 'explore' && styles.activeTabText]}>खोजें</Text>
         </TouchableOpacity>
-        <TouchableOpacity 
-          style={[styles.tab, activeTab === 'verify' && styles.activeTab]} 
-          onPress={() => setActiveTab('verify')}
-        >
+        <TouchableOpacity style={[styles.tab, activeTab === 'verify' && styles.activeTab]} onPress={() => setActiveTab('verify')}>
           <Text style={[styles.tabText, activeTab === 'verify' && styles.activeTabText]}>OTP</Text>
         </TouchableOpacity>
-        <TouchableOpacity 
-          style={[styles.tab, activeTab === 'wallet' && styles.activeTab]} 
-          onPress={() => setActiveTab('wallet')}
-        >
+        <TouchableOpacity style={[styles.tab, activeTab === 'wallet' && styles.activeTab]} onPress={() => setActiveTab('wallet')}>
           <Text style={[styles.tabText, activeTab === 'wallet' && styles.activeTabText]}>वॉलेट</Text>
         </TouchableOpacity>
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
+        {/* TAB 1: SEND */}
         {activeTab === 'send' && (
           <View style={styles.card}>
             <Text style={styles.label}>पिकअप लोकेशन</Text>
@@ -198,6 +233,17 @@ export default function App() {
 
             <Text style={styles.label}>ड्रॉप लोकेशन</Text>
             <TextInput style={styles.input} value={drop} onChangeText={setDrop} />
+
+            <View style={styles.row}>
+              <View style={{ flex: 1, marginRight: 8 }}>
+                <Text style={styles.label}>पाने वाले का नाम</Text>
+                <TextInput style={styles.input} value={receiverName} onChangeText={setReceiverName} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.label}>मोबाइल नंबर</Text>
+                <TextInput style={styles.input} value={receiverPhone} onChangeText={setReceiverPhone} keyboardType="phone-pad" />
+              </View>
+            </View>
 
             <View style={styles.row}>
               <View style={{ flex: 1, marginRight: 8 }}>
@@ -225,6 +271,100 @@ export default function App() {
           </View>
         )}
 
+        {/* TAB 2: LIVE TRACK */}
+        {activeTab === 'track' && (
+          <View>
+            <View style={styles.card}>
+              <Text style={styles.label}>ट्रैक करने के लिए पार्सल ID</Text>
+              <TextInput 
+                style={styles.input} 
+                value={trackParcelId} 
+                onChangeText={setTrackParcelId} 
+                placeholder="UUID पेस्ट करें" 
+              />
+              <TouchableOpacity style={styles.btnPrimary} onPress={() => fetchTrackStatus(trackParcelId)}>
+                <Text style={styles.btnText}>लाइव स्टेटस देखें</Text>
+              </TouchableOpacity>
+            </View>
+
+            {trackedParcel && (
+              <View style={[styles.card, { marginTop: 16 }]}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 }}>
+                  <Text style={{ fontSize: 14, fontWeight: 'bold', color: '#1F2937' }}>
+                    {trackedParcel.category}
+                  </Text>
+                  <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#059669' }}>
+                    ₹{trackedParcel.delivery_fee}
+                  </Text>
+                </View>
+
+                {/* Progress Stepper */}
+                <View style={styles.stepperContainer}>
+                  <View style={styles.stepItem}>
+                    <View style={[styles.stepCircle, getStepActive('requested', trackedParcel.status) && styles.stepCircleActive]}>
+                      <Text style={styles.stepNumber}>1</Text>
+                    </View>
+                    <Text style={[styles.stepLabel, getStepActive('requested', trackedParcel.status) && styles.stepLabelActive]}>बुक हुआ</Text>
+                  </View>
+
+                  <View style={[styles.stepLine, getStepActive('accepted', trackedParcel.status) && styles.stepLineActive]} />
+
+                  <View style={styles.stepItem}>
+                    <View style={[styles.stepCircle, getStepActive('accepted', trackedParcel.status) && styles.stepCircleActive]}>
+                      <Text style={styles.stepNumber}>2</Text>
+                    </View>
+                    <Text style={[styles.stepLabel, getStepActive('accepted', trackedParcel.status) && styles.stepLabelActive]}>स्वीकार</Text>
+                  </View>
+
+                  <View style={[styles.stepLine, getStepActive('in_transit', trackedParcel.status) && styles.stepLineActive]} />
+
+                  <View style={styles.stepItem}>
+                    <View style={[styles.stepCircle, getStepActive('in_transit', trackedParcel.status) && styles.stepCircleActive]}>
+                      <Text style={styles.stepNumber}>3</Text>
+                    </View>
+                    <Text style={[styles.stepLabel, getStepActive('in_transit', trackedParcel.status) && styles.stepLabelActive]}>ट्रांज़िट</Text>
+                  </View>
+
+                  <View style={[styles.stepLine, getStepActive('delivered', trackedParcel.status) && styles.stepLineActive]} />
+
+                  <View style={styles.stepItem}>
+                    <View style={[styles.stepCircle, getStepActive('delivered', trackedParcel.status) && styles.stepCircleActive]}>
+                      <Text style={styles.stepNumber}>4</Text>
+                    </View>
+                    <Text style={[styles.stepLabel, getStepActive('delivered', trackedParcel.status) && styles.stepLabelActive]}>डिलीवर</Text>
+                  </View>
+                </View>
+
+                {/* Receiver Info & Call */}
+                <View style={styles.contactBar}>
+                  <View>
+                    <Text style={{ fontSize: 13, fontWeight: 'bold', color: '#1F2937' }}>प्राप्तकर्ता: {trackedParcel.receiver_name}</Text>
+                    <Text style={{ fontSize: 12, color: '#6B7280' }}>📞 {trackedParcel.receiver_phone}</Text>
+                  </View>
+                  <TouchableOpacity style={styles.callIconBtn} onPress={() => makeCall(trackedParcel.receiver_phone)}>
+                    <Text style={{ color: '#FFF', fontWeight: 'bold', fontSize: 12 }}>कॉल करें</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Security OTP Badges */}
+                <View style={styles.otpGrid}>
+                  <View style={styles.otpCard}>
+                    <Text style={styles.otpCardTitle}>पिकअप OTP</Text>
+                    <Text style={styles.otpCardVal}>{trackedParcel.pickup_otp}</Text>
+                    <Text style={styles.otpCardSub}>राइडर को दें</Text>
+                  </View>
+                  <View style={styles.otpCard}>
+                    <Text style={styles.otpCardTitle}>डिलीवरी OTP</Text>
+                    <Text style={styles.otpCardVal}>{trackedParcel.delivery_otp}</Text>
+                    <Text style={styles.otpCardSub}>रिसीवर को दें</Text>
+                  </View>
+                </View>
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* TAB 3: EXPLORE (RIDER) */}
         {activeTab === 'explore' && (
           <View>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
@@ -254,9 +394,21 @@ export default function App() {
                     <Text style={styles.routeText}>🔴 {item.drop_address} <Text style={styles.mapLink}>(मैप देखें 📍)</Text></Text>
                   </TouchableOpacity>
 
-                  <Text style={styles.weightText}>वजन: {item.weight_kg} किग्रा</Text>
+                  <Text style={styles.weightText}>वजन: {item.weight_kg} किग्रा | प्राप्तकर्ता: {item.receiver_name}</Text>
 
-                  {/* मैप्स रूट बटन */}
+                  {/* Contact Action Bar (Call, SMS, WhatsApp) */}
+                  <View style={styles.actionBar}>
+                    <TouchableOpacity style={[styles.commBtn, { backgroundColor: '#2563EB' }]} onPress={() => makeCall(item.receiver_phone)}>
+                      <Text style={styles.commBtnText}>📞 कॉल</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={[styles.commBtn, { backgroundColor: '#4B5563' }]} onPress={() => sendSMS(item.receiver_phone)}>
+                      <Text style={styles.commBtnText}>💬 SMS</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={[styles.commBtn, { backgroundColor: '#059669' }]} onPress={() => openWhatsApp(item.receiver_phone)}>
+                      <Text style={styles.commBtnText}>🟢 WhatsApp</Text>
+                    </TouchableOpacity>
+                  </View>
+
                   <TouchableOpacity 
                     style={styles.mapRouteBtn} 
                     onPress={() => openRouteInMaps(item.pickup_address, item.drop_address)}
@@ -276,6 +428,7 @@ export default function App() {
           </View>
         )}
 
+        {/* TAB 4: OTP VERIFY */}
         {activeTab === 'verify' && (
           <View style={styles.card}>
             <View style={styles.verifyTypeRow}>
@@ -324,6 +477,7 @@ export default function App() {
           </View>
         )}
 
+        {/* TAB 5: WALLET */}
         {activeTab === 'wallet' && (
           <View>
             <View style={styles.walletCard}>
@@ -368,9 +522,9 @@ const styles = StyleSheet.create({
   headerTitle: { color: '#FFF', fontSize: 22, fontWeight: 'bold' },
   headerSub: { color: '#C7D2FE', fontSize: 12, marginTop: 4 },
   tabContainer: { flexDirection: 'row', backgroundColor: '#FFF', borderBottomWidth: 1, borderColor: '#E5E7EB' },
-  tab: { flex: 1, paddingVertical: 14, alignItems: 'center' },
+  tab: { flex: 1, paddingVertical: 12, alignItems: 'center' },
   activeTab: { borderBottomWidth: 2, borderColor: '#4F46E5' },
-  tabText: { color: '#6B7280', fontWeight: '600', fontSize: 13 },
+  tabText: { color: '#6B7280', fontWeight: '600', fontSize: 12 },
   activeTabText: { color: '#4F46E5' },
   content: { padding: 16 },
   card: { backgroundColor: '#FFF', padding: 16, borderRadius: 12, elevation: 2 },
@@ -401,6 +555,9 @@ const styles = StyleSheet.create({
   routeText: { fontSize: 14, color: '#374151', marginVertical: 3 },
   mapLink: { color: '#2563EB', fontSize: 12, fontWeight: 'bold' },
   weightText: { fontSize: 12, color: '#6B7280', marginTop: 4 },
+  actionBar: { flexDirection: 'row', gap: 8, marginTop: 10 },
+  commBtn: { flex: 1, paddingVertical: 8, borderRadius: 6, alignItems: 'center' },
+  commBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 11 },
   mapRouteBtn: { marginTop: 10, backgroundColor: '#EFF6FF', borderWidth: 1, borderColor: '#BFDBFE', padding: 10, borderRadius: 8, alignItems: 'center' },
   mapRouteBtnText: { color: '#1D4ED8', fontWeight: 'bold', fontSize: 12 },
   acceptBtn: { marginTop: 8, backgroundColor: '#4F46E5', padding: 10, borderRadius: 8, alignItems: 'center' },
@@ -410,5 +567,21 @@ const styles = StyleSheet.create({
   walletBalance: { color: '#FFF', fontSize: 32, fontWeight: 'bold', marginVertical: 6 },
   walletSub: { color: '#A5B4FC', fontSize: 12 },
   historyCard: { backgroundColor: '#FFF', padding: 14, borderRadius: 10, marginBottom: 10, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', elevation: 1 },
-  historyFee: { color: '#059669', fontWeight: 'bold', fontSize: 16 }
+  historyFee: { color: '#059669', fontWeight: 'bold', fontSize: 16 },
+  stepperContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginVertical: 14 },
+  stepItem: { alignItems: 'center', zIndex: 1 },
+  stepCircle: { width: 28, height: 28, borderRadius: 14, backgroundColor: '#E5E7EB', alignItems: 'center', justifyContent: 'center' },
+  stepCircleActive: { backgroundColor: '#4F46E5' },
+  stepNumber: { color: '#FFF', fontSize: 12, fontWeight: 'bold' },
+  stepLabel: { fontSize: 10, color: '#9CA3AF', marginTop: 4, fontWeight: '600' },
+  stepLabelActive: { color: '#4F46E5', fontWeight: 'bold' },
+  stepLine: { flex: 1, height: 3, backgroundColor: '#E5E7EB', marginHorizontal: -4, marginTop: -14 },
+  stepLineActive: { backgroundColor: '#4F46E5' },
+  contactBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#F9FAFB', padding: 10, borderRadius: 8, marginTop: 12 },
+  callIconBtn: { backgroundColor: '#10B981', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 },
+  otpGrid: { flexDirection: 'row', gap: 10, marginTop: 14 },
+  otpCard: { flex: 1, backgroundColor: '#EEF2FF', padding: 12, borderRadius: 8, alignItems: 'center' },
+  otpCardTitle: { fontSize: 11, color: '#4F46E5', fontWeight: 'bold' },
+  otpCardVal: { fontSize: 20, fontWeight: 'bold', color: '#1E1B4B', marginVertical: 2, letterSpacing: 2 },
+  otpCardSub: { fontSize: 9, color: '#6B7280' }
 });
