@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, TextInput, TouchableOpacity, ScrollView, SafeAreaView, Alert } from 'react-native';
+import { StyleSheet, Text, View, TextInput, TouchableOpacity, ScrollView, SafeAreaView, Alert, Linking } from 'react-native';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('send'); // 'send', 'explore', 'verify', 'wallet'
@@ -30,6 +30,21 @@ export default function App() {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
     'bypass-tunnel-reminder': '1'
+  };
+
+  // गूगल मैप्स खोलने का फ़ंक्शन
+  const openInMaps = (address) => {
+    const encoded = encodeURIComponent(address);
+    const url = `https://www.google.com/maps/search/?api=1&query=${encoded}`;
+    Linking.openURL(url).catch(() => Alert.alert('एरर', 'गूगल मैप्स नहीं खोला जा सका'));
+  };
+
+  // पूरा रूट (पिकअप से ड्रॉप) नेविगेट करने का फ़ंक्शन
+  const openRouteInMaps = (origin, destination) => {
+    const encodedOrigin = encodeURIComponent(origin);
+    const encodedDest = encodeURIComponent(destination);
+    const url = `https://www.google.com/maps/dir/?api=1&origin=${encodedOrigin}&destination=${encodedDest}&travelmode=driving`;
+    Linking.openURL(url).catch(() => Alert.alert('एरर', 'गूगल मैप्स नहीं खोला जा सका'));
   };
 
   const fetchAvailableParcels = async () => {
@@ -230,9 +245,24 @@ export default function App() {
                     <Text style={styles.categoryBadge}>{item.category}</Text>
                     <Text style={styles.feeBadge}>₹{item.delivery_fee}</Text>
                   </View>
-                  <Text style={styles.routeText}>🟢 {item.pickup_address}</Text>
-                  <Text style={styles.routeText}>🔴 {item.drop_address}</Text>
+
+                  <TouchableOpacity onPress={() => openInMaps(item.pickup_address)}>
+                    <Text style={styles.routeText}>🟢 {item.pickup_address} <Text style={styles.mapLink}>(मैप देखें 📍)</Text></Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity onPress={() => openInMaps(item.drop_address)}>
+                    <Text style={styles.routeText}>🔴 {item.drop_address} <Text style={styles.mapLink}>(मैप देखें 📍)</Text></Text>
+                  </TouchableOpacity>
+
                   <Text style={styles.weightText}>वजन: {item.weight_kg} किग्रा</Text>
+
+                  {/* मैप्स रूट बटन */}
+                  <TouchableOpacity 
+                    style={styles.mapRouteBtn} 
+                    onPress={() => openRouteInMaps(item.pickup_address, item.drop_address)}
+                  >
+                    <Text style={styles.mapRouteBtnText}>🗺️ गूगल मैप्स में पूरा रूट नेविगेट करें</Text>
+                  </TouchableOpacity>
 
                   <TouchableOpacity 
                     style={styles.acceptBtn} 
@@ -296,7 +326,6 @@ export default function App() {
 
         {activeTab === 'wallet' && (
           <View>
-            {/* वॉलेट समरी कार्ड */}
             <View style={styles.walletCard}>
               <Text style={styles.walletTitle}>कुल कमाई (Total Earnings)</Text>
               <Text style={styles.walletBalance}>₹{walletData.totalEarnings}</Text>
@@ -369,9 +398,12 @@ const styles = StyleSheet.create({
   parcelHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
   categoryBadge: { backgroundColor: '#EEF2FF', color: '#4F46E5', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4, fontSize: 12, fontWeight: 'bold' },
   feeBadge: { fontSize: 18, fontWeight: 'bold', color: '#059669' },
-  routeText: { fontSize: 14, color: '#374151', marginVertical: 2 },
+  routeText: { fontSize: 14, color: '#374151', marginVertical: 3 },
+  mapLink: { color: '#2563EB', fontSize: 12, fontWeight: 'bold' },
   weightText: { fontSize: 12, color: '#6B7280', marginTop: 4 },
-  acceptBtn: { marginTop: 12, backgroundColor: '#4F46E5', padding: 10, borderRadius: 8, alignItems: 'center' },
+  mapRouteBtn: { marginTop: 10, backgroundColor: '#EFF6FF', borderWidth: 1, borderColor: '#BFDBFE', padding: 10, borderRadius: 8, alignItems: 'center' },
+  mapRouteBtnText: { color: '#1D4ED8', fontWeight: 'bold', fontSize: 12 },
+  acceptBtn: { marginTop: 8, backgroundColor: '#4F46E5', padding: 10, borderRadius: 8, alignItems: 'center' },
   acceptBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 13 },
   walletCard: { backgroundColor: '#1E1B4B', padding: 20, borderRadius: 16, marginBottom: 20, elevation: 4 },
   walletTitle: { color: '#C7D2FE', fontSize: 13, fontWeight: '600' },
