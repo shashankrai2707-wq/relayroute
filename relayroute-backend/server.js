@@ -14,7 +14,6 @@ const pool = new Pool({
   port: 5432,
 });
 
-// 1. Default User Route
 app.get('/api/user/default', async (req, res) => {
   try {
     let result = await pool.query("SELECT * FROM users LIMIT 1;");
@@ -30,7 +29,6 @@ app.get('/api/user/default', async (req, res) => {
   }
 });
 
-// 2. Parcel Booking Route
 app.post('/api/parcels/create', async (req, res) => {
   try {
     const { sender_id, category, weight_kg, pickup_address, drop_address, receiver_name, receiver_phone, delivery_fee } = req.body;
@@ -44,40 +42,32 @@ app.post('/api/parcels/create', async (req, res) => {
     `;
     const values = [sender_id, category, weight_kg, pickup_address, drop_address, receiver_name, receiver_phone, delivery_fee, pickup_otp, delivery_otp];
     const result = await pool.query(query, values);
-
     res.json({ success: true, parcel: result.rows[0] });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
-// 3. Sender Tracking API (Naya Endpoint)
 app.get('/api/parcels/track/:id', async (req, res) => {
   try {
     const parcelId = req.params.id.trim();
     const result = await pool.query("SELECT * FROM parcels WHERE id = $1;", [parcelId]);
-    if (result.rows.length === 0) {
-      return res.status(404).json({ success: false, error: 'Parcel nahi mila' });
-    }
+    if (result.rows.length === 0) return res.status(404).json({ success: false, error: 'Parcel नहीं मिला' });
     res.json({ success: true, parcel: result.rows[0] });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
-// 4. Available Parcels Route (Rider)
 app.get('/api/parcels/available', async (req, res) => {
   try {
-    const result = await pool.query(
-      "SELECT * FROM parcels WHERE status = 'requested' ORDER BY created_at DESC;"
-    );
+    const result = await pool.query("SELECT * FROM parcels WHERE status = 'requested' ORDER BY created_at DESC;");
     res.json({ success: true, parcels: result.rows });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
-// 5. Accept Parcel Route
 app.post('/api/parcels/accept', async (req, res) => {
   try {
     const parcel_id = req.body.parcel_id ? req.body.parcel_id.trim() : "";
@@ -88,21 +78,15 @@ app.post('/api/parcels/accept', async (req, res) => {
   }
 });
 
-// 6. Pickup OTP Verification
 app.post('/api/parcels/verify-pickup', async (req, res) => {
   try {
     const parcel_id = req.body.parcel_id ? req.body.parcel_id.trim() : "";
     const otp = req.body.otp ? req.body.otp.trim() : "";
     const result = await pool.query("SELECT * FROM parcels WHERE id = $1;", [parcel_id]);
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ success: false, error: 'पार्सल नहीं मिला' });
-    }
+    if (result.rows.length === 0) return res.status(404).json({ success: false, error: 'पार्सल नहीं मिला' });
 
     const parcel = result.rows[0];
-    if (parcel.pickup_otp !== otp) {
-      return res.status(400).json({ success: false, error: 'अमान्य पिकअप OTP' });
-    }
+    if (parcel.pickup_otp !== otp) return res.status(400).json({ success: false, error: 'अमान्य पिकअप OTP' });
 
     await pool.query("UPDATE parcels SET status = 'in_transit' WHERE id = $1;", [parcel_id]);
     res.json({ success: true, message: '✓ पिकअप वेरिफाई हुआ! पार्सल अब ट्रांज़िट में है।' });
@@ -111,57 +95,45 @@ app.post('/api/parcels/verify-pickup', async (req, res) => {
   }
 });
 
-// 7. Delivery OTP Verification
 app.post('/api/parcels/verify-delivery', async (req, res) => {
   try {
     const parcel_id = req.body.parcel_id ? req.body.parcel_id.trim() : "";
     const otp = req.body.otp ? req.body.otp.trim() : "";
     const result = await pool.query("SELECT * FROM parcels WHERE id = $1;", [parcel_id]);
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ success: false, error: 'पार्सल नहीं मिला' });
-    }
+    if (result.rows.length === 0) return res.status(404).json({ success: false, error: 'पार्सल नहीं मिला' });
 
     const parcel = result.rows[0];
-    if (parcel.status !== 'in_transit') {
-      return res.status(400).json({ success: false, error: 'पार्सल अभी ट्रांज़िट में नहीं है' });
-    }
-
-    if (parcel.delivery_otp !== otp) {
-      return res.status(400).json({ success: false, error: 'अमान्य डिलीवरी OTP' });
-    }
+    if (parcel.status !== 'in_transit') return res.status(400).json({ success: false, error: 'पार्सल अभी ट्रांज़िट में नहीं है' });
+    if (parcel.delivery_otp !== otp) return res.status(400).json({ success: false, error: 'अमान्य डिलीवरी OTP' });
 
     await pool.query("UPDATE parcels SET status = 'delivered' WHERE id = $1;", [parcel_id]);
-    res.json({ 
-      success: true, 
-      message: `🎉 डिलीवरी सफल! ₹${parcel.delivery_fee} का भुगतान राइडर खाते में प्रोसेस कर दिया गया।` 
-    });
+    res.json({ success: true, message: `🎉 डिलीवरी सफल! ₹${parcel.delivery_fee} का भुगतान प्रोसेस हुआ।` });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
-// 8. Rider Wallet Route
+// 8. रेटिंग एंडपॉइंट (नया)
+app.post('/api/parcels/rate', async (req, res) => {
+  try {
+    const { parcel_id, rating, feedback } = req.body;
+    await pool.query("UPDATE parcels SET rating = $1, feedback = $2 WHERE id = $3;", [rating, feedback, parcel_id]);
+    res.json({ success: true, message: 'रेटिंग सफलतापूर्वक दर्ज की गई!' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 app.get('/api/rider/wallet', async (req, res) => {
   try {
-    const deliveredResult = await pool.query(
-      "SELECT * FROM parcels WHERE status = 'delivered' ORDER BY created_at DESC;"
-    );
+    const deliveredResult = await pool.query("SELECT * FROM parcels WHERE status = 'delivered' ORDER BY created_at DESC;");
     const parcels = deliveredResult.rows;
     const totalEarnings = parcels.reduce((sum, item) => sum + Number(item.delivery_fee || 0), 0);
-
-    res.json({
-      success: true,
-      totalEarnings,
-      completedCount: parcels.length,
-      history: parcels
-    });
+    res.json({ success: true, totalEarnings, completedCount: parcels.length, history: parcels });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
 const PORT = 5000;
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on http://localhost:${PORT}`);
-});
+app.listen(PORT, () => console.log(`🚀 Server running on http://localhost:${PORT}`));
