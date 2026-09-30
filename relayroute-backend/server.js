@@ -457,3 +457,56 @@ app.get('/api/wallet/:userId', (req, res) => {
     const balance = userWallets[userId] || 0.00;
     res.json({ success: true, balance: balance });
 });
+// Database Pool import
+const pool = require('./db');
+
+// 1. Get Real Wallet Balance from Neon DB
+app.get('/api/wallet/:userId', async (req, res) => {
+    try {
+        const { userId } = req.params;
+        const result = await pool.query('SELECT balance FROM wallets WHERE user_id = $1', [userId]);
+        
+        if (result.rows.length === 0) {
+            await pool.query('INSERT INTO wallets (user_id, balance) VALUES ($1, $2)', [userId, 0.00]);
+            return res.json({ success: true, balance: 0.00 });
+        }
+        
+        res.json({ success: true, balance: parseFloat(result.rows[0].balance) });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ success: false, message: 'Database error' });
+    }
+});
+
+// 2. Update Real Wallet Balance in Neon DB
+app.post('/api/wallet/update', async (req, res) => {
+    try {
+        const { userId, amount, type } = req.body;
+        
+        let checkUser = await pool.query('SELECT balance FROM wallets WHERE user_id = $1', [userId]);
+        let currentBalance = checkUser.rows.length > 0 ? parseFloat(checkUser.rows[0].balance) : 0.00;
+
+        let newBalance = currentBalance;
+        if (type === 'credit') {
+            newBalance += parseFloat(amount);
+        } else if (type === 'debit') {
+            if (currentBalance < amount) {
+                return res.status(400).json({ success: false, message: 'Insufficient balance' });
+            }
+            newBalance -= parseFloat(amount);
+        }
+
+        await pool.query(
+            `INSERT INTO wallets (user_id, balance, updated_at) 
+             VALUES ($1, $2, CURRENT_TIMESTAMP) 
+             ON CONFLICT (user_id) 
+             DO UPDATE SET balance = $2, updated_at = CURRENT_TIMESTAMP`,
+            [userId, newBalance]
+        );
+
+        res.json({ success: true, balance: newBalance });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ success: false, message: 'Database error' });
+    }
+});
