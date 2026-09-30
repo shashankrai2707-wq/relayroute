@@ -389,3 +389,32 @@ app.get('/admin', async (req, res) => {
 
 const PORT = 5000;
 app.listen(PORT, () => console.log(`🚀 Server running on http://localhost:${PORT}`));
+const PDFDocument = require('pdfkit');
+
+// PDF Invoice Route
+app.get('/api/invoice/:orderId', async (req, res) => {
+    try {
+        const orderId = req.params.orderId;
+        // आप चाहें तो यहाँ Neon database से आर्डर की पूरी डिटेल्स फेच कर सकते हैं
+
+        const doc = new PDFDocument();
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename=invoice-${orderId}.pdf`);
+
+        doc.pipe(res);
+
+        // PDF Design & Content
+        doc.fontSize(22).text('RelayRoute Invoice', { align: 'center' });
+        doc.moveDown();
+        doc.fontSize(14).text(`Order ID: ${orderId}`);
+        doc.text(`Date: ${new Date().toLocaleDateString()}`);
+        doc.text('Status: Paid / Success');
+        doc.moveDown();
+        doc.text('Thank you for using RelayRoute!');
+
+        doc.end();
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Error generating PDF invoice');
+    }
+});
