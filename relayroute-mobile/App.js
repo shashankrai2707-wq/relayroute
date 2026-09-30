@@ -18,7 +18,11 @@ export default function App() {
   const [receiverName, setReceiverName] = useState('सुरेश कुमार');
   const [receiverPhone, setReceiverPhone] = useState('9876543210');
   const [bookingData, setBookingData] = useState(null);
+  
+  // Orders & Filter State
   const [myOrders, setMyOrders] = useState([]);
+  const [orderStatusFilter, setOrderStatusFilter] = useState('all'); // all, active, delivered, cancelled
+  const [orderSearchText, setOrderSearchText] = useState('');
 
   // Rider Discovery, Filter & Active Tasks
   const [availableParcels, setAvailableParcels] = useState([]);
@@ -331,6 +335,27 @@ export default function App() {
     }
   };
 
+  // ऑर्डर्स फ़िल्टरिंग लॉजिक
+  const filteredOrders = myOrders.filter((ord) => {
+    const matchesSearch = 
+      ord.receiver_name.toLowerCase().includes(orderSearchText.toLowerCase()) ||
+      ord.pickup_address.toLowerCase().includes(orderSearchText.toLowerCase()) ||
+      ord.drop_address.toLowerCase().includes(orderSearchText.toLowerCase());
+
+    if (!matchesSearch) return false;
+
+    if (orderStatusFilter === 'active') {
+      return ord.status === 'requested' || ord.status === 'accepted' || ord.status === 'in_transit';
+    }
+    if (orderStatusFilter === 'delivered') {
+      return ord.status === 'delivered';
+    }
+    if (orderStatusFilter === 'cancelled') {
+      return ord.status === 'cancelled';
+    }
+    return true; // 'all'
+  });
+
   const filteredParcels = availableParcels.filter(p => 
     p.pickup_address.toLowerCase().includes(searchFilter.toLowerCase()) ||
     p.drop_address.toLowerCase().includes(searchFilter.toLowerCase()) ||
@@ -413,7 +438,7 @@ export default function App() {
 
             <View style={styles.insuranceRow}>
               <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 13, fontWeight: 'bold', color: '#1F2937' }}>🛡️️ पार्सल सुरक्षा बीमा (+₹20)</Text>
+                <Text style={{ fontSize: 13, fontWeight: 'bold', color: '#1F2937' }}>🛡 पार्सल सुरक्षा बीमा (+₹20)</Text>
                 <Text style={{ fontSize: 10, color: '#6B7280' }}>नुकसान या खोने पर 100% रिफंड गारंटी</Text>
               </View>
               <Switch value={hasInsurance} onValueChange={handleInsuranceToggle} thumbColor={hasInsurance ? "#4F46E5" : "#f4f3f4"} />
@@ -440,19 +465,59 @@ export default function App() {
           </View>
         )}
 
+        {/* TAB: MY ORDERS WITH SEARCH & FILTER CHIPS */}
         {activeTab === 'orders' && (
           <View>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
               <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#1F2937' }}>मेरे बुक किए गए ऑर्डर्स</Text>
               <TouchableOpacity onPress={fetchMyOrders}>
                 <Text style={{ color: '#4F46E5', fontWeight: 'bold' }}>रीफ़्रेश</Text>
               </TouchableOpacity>
             </View>
 
-            {myOrders.length === 0 ? (
-              <View style={styles.emptyBox}><Text style={{ color: '#6B7280' }}>आपने अभी तक कोई पार्सल बुक नहीं किया है।</Text></View>
+            {/* Status Filter Chips */}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 10 }}>
+              <TouchableOpacity 
+                style={[styles.filterChip, orderStatusFilter === 'all' && styles.filterChipActive]} 
+                onPress={() => setOrderStatusFilter('all')}
+              >
+                <Text style={[styles.filterChipText, orderStatusFilter === 'all' && styles.filterChipTextActive]}>सभी ({myOrders.length})</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={[styles.filterChip, orderStatusFilter === 'active' && styles.filterChipActive]} 
+                onPress={() => setOrderStatusFilter('active')}
+              >
+                <Text style={[styles.filterChipText, orderStatusFilter === 'active' && styles.filterChipTextActive]}>सक्रिय</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={[styles.filterChip, orderStatusFilter === 'delivered' && styles.filterChipActive]} 
+                onPress={() => setOrderStatusFilter('delivered')}
+              >
+                <Text style={[styles.filterChipText, orderStatusFilter === 'delivered' && styles.filterChipTextActive]}>डिलीवर हुए</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={[styles.filterChip, orderStatusFilter === 'cancelled' && styles.filterChipActive]} 
+                onPress={() => setOrderStatusFilter('cancelled')}
+              >
+                <Text style={[styles.filterChipText, orderStatusFilter === 'cancelled' && styles.filterChipTextActive]}>कैंसिल</Text>
+              </TouchableOpacity>
+            </ScrollView>
+
+            {/* Order Search Input */}
+            <TextInput 
+              style={[styles.input, { marginBottom: 12, backgroundColor: '#FFF' }]} 
+              placeholder="🔍 नाम या शहर से ऑर्डर खोजें..." 
+              value={orderSearchText} 
+              onChangeText={setOrderSearchText} 
+            />
+
+            {filteredOrders.length === 0 ? (
+              <View style={styles.emptyBox}><Text style={{ color: '#6B7280' }}>कोई ऑर्डर मैच नहीं हुआ।</Text></View>
             ) : (
-              myOrders.map((ord) => {
+              filteredOrders.map((ord) => {
                 const badge = getStatusBadge(ord.status);
                 return (
                   <View key={ord.id} style={styles.parcelCard}>
@@ -801,6 +866,10 @@ const styles = StyleSheet.create({
   chipActive: { backgroundColor: '#EEF2FF', borderColor: '#4F46E5' },
   chipText: { fontSize: 12, color: '#4B5563', fontWeight: '500' },
   chipTextActive: { color: '#4F46E5', fontWeight: 'bold' },
+  filterChip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, backgroundColor: '#FFF', marginRight: 8, borderWidth: 1, borderColor: '#D1D5DB' },
+  filterChipActive: { backgroundColor: '#4F46E5', borderColor: '#4F46E5' },
+  filterChipText: { fontSize: 12, color: '#4B5563', fontWeight: '600' },
+  filterChipTextActive: { color: '#FFF', fontWeight: 'bold' },
   insuranceRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#F9FAFB', padding: 10, borderRadius: 8, marginVertical: 10, borderWidth: 1, borderColor: '#E5E7EB' },
   verifyTypeRow: { flexDirection: 'row', marginBottom: 12, gap: 8 },
   typeBtn: { flex: 1, paddingVertical: 8, borderWidth: 1, borderColor: '#D1D5DB', borderRadius: 6, alignItems: 'center', backgroundColor: '#F9FAFB' },
