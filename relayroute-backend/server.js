@@ -424,3 +424,36 @@ app.post('/api/update-location', (req, res) => {
     console.log(`Live Location Received -> Lat: ${latitude}, Lng: ${longitude}`);
     res.json({ success: true, message: 'Location updated successfully' });
 });
+// 1. Notification Endpoint
+app.post('/api/send-notification', (req, res) => {
+    const { userId, message, title } = req.body;
+    console.log(`Notification sent to User ${userId}: [${title}] ${message}`);
+    // Yahan aap Firebase Cloud Messaging (FCM) ya Web Push integrate kar sakte hain
+    res.json({ success: true, message: 'Notification sent successfully' });
+});
+
+// 2. Wallet & Payment Balance Endpoint
+let userWallets = {}; // Temporary memory storage (Neon DB se bhi connect kar sakte hain)
+
+app.post('/api/wallet/update', (req, res) => {
+    const { userId, amount, type } = req.body; // type: 'credit' ya 'debit'
+    if (!userWallets[userId]) userWallets[userId] = 0.00;
+
+    if (type === 'credit') {
+        userWallets[userId] += parseFloat(amount);
+    } else if (type === 'debit') {
+        if (userWallets[userId] < amount) {
+            return res.status(400).json({ success: false, message: 'Insufficient balance' });
+        }
+        userWallets[userId] -= parseFloat(amount);
+    }
+
+    console.log(`Wallet Updated for User ${userId}. Current Balance: ${userWallets[userId]}`);
+    res.json({ success: true, balance: userWallets[userId] });
+});
+
+app.get('/api/wallet/:userId', (req, res) => {
+    const userId = req.params.userId;
+    const balance = userWallets[userId] || 0.00;
+    res.json({ success: true, balance: balance });
+});
