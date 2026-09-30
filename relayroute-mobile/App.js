@@ -4,8 +4,10 @@ import { StyleSheet, Text, View, TextInput, TouchableOpacity, ScrollView, SafeAr
 export default function App() {
   const [activeTab, setActiveTab] = useState('send');
   
-  // Profile State
-  const [profile, setProfile] = useState({ name: 'शशांक कुमार', phone: '9876543210', role: 'sender' });
+  // Profile State with Live Edit
+  const [profile, setProfile] = useState({ name: '', phone: '', role: 'sender' });
+  const [editName, setEditName] = useState('');
+  const [editPhone, setEditPhone] = useState('');
 
   // Sender States
   const categories = ['दस्तावेज़ (Documents)', 'इलेक्ट्रॉनिक्स (Electronics)', 'कपड़े / सामान (Clothes)', 'दवाइयाँ (Medicines)'];
@@ -16,12 +18,12 @@ export default function App() {
   const [pickup, setPickup] = useState('सेक्टर 62, नोएडा');
   const [drop, setDrop] = useState('एमजी रोड, आगरा');
   const [receiverName, setReceiverName] = useState('सुरेश कुमार');
-  const [receiverPhone, setReceiverPhone] = useState('9876543210');
+  const [receiverPhone, setReceiverPhone] = useState('');
   const [bookingData, setBookingData] = useState(null);
   
   // Orders & Filter State
   const [myOrders, setMyOrders] = useState([]);
-  const [orderStatusFilter, setOrderStatusFilter] = useState('all'); // all, active, delivered, cancelled
+  const [orderStatusFilter, setOrderStatusFilter] = useState('all');
   const [orderSearchText, setOrderSearchText] = useState('');
 
   // Rider Discovery, Filter & Active Tasks
@@ -74,17 +76,17 @@ export default function App() {
   };
 
   const makeCall = (phone) => {
-    if (!phone) return Alert.alert('त्रुटि', 'फोन नंबर नहीं है');
+    if (!phone) return Alert.alert('त्रुटि', 'फोन नंबर उपलब्ध नहीं है');
     Linking.openURL(`tel:${phone}`).catch(() => Alert.alert('एरर', 'कॉल नहीं हो सकी'));
   };
 
   const sendSMS = (phone) => {
-    if (!phone) return Alert.alert('त्रुटि', 'फोन नंबर नहीं है');
+    if (!phone) return Alert.alert('त्रुटि', 'फोन नंबर उपलब्ध नहीं है');
     Linking.openURL(`sms:${phone}?body=${encodeURIComponent('नमस्ते, RelayRoute डिलीवरी के संबंध में।')}`);
   };
 
   const openWhatsApp = (phone, msg) => {
-    if (!phone) return Alert.alert('त्रुटि', 'फोन नंबर नहीं है');
+    if (!phone) return Alert.alert('त्रुटि', 'फोन नंबर उपलब्ध नहीं है');
     const clean = phone.replace(/[^0-9]/g, '');
     const full = clean.length === 10 ? `91${clean}` : clean;
     const text = msg || 'नमस्ते, RelayRoute पार्सल के संबंध में।';
@@ -109,6 +111,37 @@ export default function App() {
     Linking.openURL(`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}&travelmode=driving`);
   };
 
+  const fetchProfile = async () => {
+    try {
+      const res = await fetch(`${API_URL}/api/user/default`, { headers: reqHeaders });
+      const data = await res.json();
+      setProfile(data);
+      setEditName(data.name || '');
+      setEditPhone(data.phone || '');
+    } catch (err) {}
+  };
+
+  const saveProfile = async () => {
+    if (!editPhone || editPhone.length < 10) {
+      return Alert.alert('त्रुटि', 'कृपया 10 अंकों का मान्य मोबाइल नंबर दर्ज करें');
+    }
+    try {
+      const res = await fetch(`${API_URL}/api/user/update`, {
+        method: 'POST',
+        headers: reqHeaders,
+        body: JSON.stringify({ name: editName, phone: editPhone })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setProfile(data.user);
+        triggerVibration([0, 80]);
+        Alert.alert('सफल', 'आपकी प्रोफ़ाइल और फ़ोन नंबर सुरक्षित हो गया!');
+      }
+    } catch (err) {
+      Alert.alert('त्रुटि', 'अपडेट नहीं हो सका');
+    }
+  };
+
   const fetchAvailableParcels = async () => {
     try {
       const res = await fetch(`${API_URL}/api/parcels/available`, { headers: reqHeaders });
@@ -124,9 +157,7 @@ export default function App() {
       const res = await fetch(`${API_URL}/api/rider/active-tasks`, { headers: reqHeaders });
       const data = await res.json();
       if (data.success) setRiderActiveTasks(data.tasks);
-    } catch (err) {
-      console.log('Task fetch error');
-    }
+    } catch (err) {}
   };
 
   const fetchMyOrders = async () => {
@@ -200,6 +231,10 @@ export default function App() {
   };
 
   useEffect(() => {
+    fetchProfile();
+  }, []);
+
+  useEffect(() => {
     if (activeTab === 'explore') {
       fetchAvailableParcels();
       fetchRiderTasks();
@@ -207,18 +242,19 @@ export default function App() {
     if (activeTab === 'wallet') fetchWalletData();
     if (activeTab === 'orders') fetchMyOrders();
     if (activeTab === 'track' && trackParcelId) fetchTrackStatus(trackParcelId);
+    if (activeTab === 'profile') fetchProfile();
   }, [activeTab]);
 
   const handleBooking = async () => {
+    if (!receiverPhone || receiverPhone.length < 10) {
+      return Alert.alert('ध्यान दें', 'कृपया पाने वाले का 10 अंकों का मान्य मोबाइल नंबर भरें');
+    }
     try {
-      const userRes = await fetch(`${API_URL}/api/user/default`, { headers: reqHeaders });
-      const user = await userRes.json();
-
       const res = await fetch(`${API_URL}/api/parcels/create`, {
         method: 'POST',
         headers: reqHeaders,
         body: JSON.stringify({
-          sender_id: user.id,
+          sender_id: profile.id,
           category,
           weight_kg: parseFloat(weight) || 1,
           pickup_address: pickup,
@@ -335,7 +371,6 @@ export default function App() {
     }
   };
 
-  // ऑर्डर्स फ़िल्टरिंग लॉजिक
   const filteredOrders = myOrders.filter((ord) => {
     const matchesSearch = 
       ord.receiver_name.toLowerCase().includes(orderSearchText.toLowerCase()) ||
@@ -343,17 +378,10 @@ export default function App() {
       ord.drop_address.toLowerCase().includes(orderSearchText.toLowerCase());
 
     if (!matchesSearch) return false;
-
-    if (orderStatusFilter === 'active') {
-      return ord.status === 'requested' || ord.status === 'accepted' || ord.status === 'in_transit';
-    }
-    if (orderStatusFilter === 'delivered') {
-      return ord.status === 'delivered';
-    }
-    if (orderStatusFilter === 'cancelled') {
-      return ord.status === 'cancelled';
-    }
-    return true; // 'all'
+    if (orderStatusFilter === 'active') return ['requested', 'accepted', 'in_transit'].includes(ord.status);
+    if (orderStatusFilter === 'delivered') return ord.status === 'delivered';
+    if (orderStatusFilter === 'cancelled') return ord.status === 'cancelled';
+    return true;
   });
 
   const filteredParcels = availableParcels.filter(p => 
@@ -394,6 +422,7 @@ export default function App() {
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
+        {/* TAB 1: SEND */}
         {activeTab === 'send' && (
           <View style={styles.card}>
             <Text style={styles.label}>पार्सल प्रकार (Category)</Text>
@@ -421,7 +450,13 @@ export default function App() {
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.label}>मोबाइल नंबर</Text>
-                <TextInput style={styles.input} value={receiverPhone} onChangeText={setReceiverPhone} keyboardType="phone-pad" />
+                <TextInput 
+                  style={styles.input} 
+                  value={receiverPhone} 
+                  onChangeText={setReceiverPhone} 
+                  keyboardType="phone-pad" 
+                  placeholder="10 अंकों का नंबर"
+                />
               </View>
             </View>
 
@@ -431,14 +466,14 @@ export default function App() {
                 <TextInput style={styles.input} value={weight} onChangeText={handleWeightChange} keyboardType="numeric" />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.label}>अनुमानित किराया (₹)</Text>
+                <Text style={styles.label}>किराया (₹)</Text>
                 <TextInput style={[styles.input, { backgroundColor: '#ECFDF5', borderColor: '#10B981', fontWeight: 'bold' }]} value={fee} onChangeText={setFee} keyboardType="numeric" />
               </View>
             </View>
 
             <View style={styles.insuranceRow}>
               <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 13, fontWeight: 'bold', color: '#1F2937' }}>🛡 पार्सल सुरक्षा बीमा (+₹20)</Text>
+                <Text style={{ fontSize: 13, fontWeight: 'bold', color: '#1F2937' }}>🛡️ पार्सल सुरक्षा बीमा (+₹20)</Text>
                 <Text style={{ fontSize: 10, color: '#6B7280' }}>नुकसान या खोने पर 100% रिफंड गारंटी</Text>
               </View>
               <Switch value={hasInsurance} onValueChange={handleInsuranceToggle} thumbColor={hasInsurance ? "#4F46E5" : "#f4f3f4"} />
@@ -465,7 +500,7 @@ export default function App() {
           </View>
         )}
 
-        {/* TAB: MY ORDERS WITH SEARCH & FILTER CHIPS */}
+        {/* TAB 2: MY ORDERS */}
         {activeTab === 'orders' && (
           <View>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
@@ -475,38 +510,21 @@ export default function App() {
               </TouchableOpacity>
             </View>
 
-            {/* Status Filter Chips */}
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 10 }}>
-              <TouchableOpacity 
-                style={[styles.filterChip, orderStatusFilter === 'all' && styles.filterChipActive]} 
-                onPress={() => setOrderStatusFilter('all')}
-              >
+              <TouchableOpacity style={[styles.filterChip, orderStatusFilter === 'all' && styles.filterChipActive]} onPress={() => setOrderStatusFilter('all')}>
                 <Text style={[styles.filterChipText, orderStatusFilter === 'all' && styles.filterChipTextActive]}>सभी ({myOrders.length})</Text>
               </TouchableOpacity>
-
-              <TouchableOpacity 
-                style={[styles.filterChip, orderStatusFilter === 'active' && styles.filterChipActive]} 
-                onPress={() => setOrderStatusFilter('active')}
-              >
+              <TouchableOpacity style={[styles.filterChip, orderStatusFilter === 'active' && styles.filterChipActive]} onPress={() => setOrderStatusFilter('active')}>
                 <Text style={[styles.filterChipText, orderStatusFilter === 'active' && styles.filterChipTextActive]}>सक्रिय</Text>
               </TouchableOpacity>
-
-              <TouchableOpacity 
-                style={[styles.filterChip, orderStatusFilter === 'delivered' && styles.filterChipActive]} 
-                onPress={() => setOrderStatusFilter('delivered')}
-              >
+              <TouchableOpacity style={[styles.filterChip, orderStatusFilter === 'delivered' && styles.filterChipActive]} onPress={() => setOrderStatusFilter('delivered')}>
                 <Text style={[styles.filterChipText, orderStatusFilter === 'delivered' && styles.filterChipTextActive]}>डिलीवर हुए</Text>
               </TouchableOpacity>
-
-              <TouchableOpacity 
-                style={[styles.filterChip, orderStatusFilter === 'cancelled' && styles.filterChipActive]} 
-                onPress={() => setOrderStatusFilter('cancelled')}
-              >
+              <TouchableOpacity style={[styles.filterChip, orderStatusFilter === 'cancelled' && styles.filterChipActive]} onPress={() => setOrderStatusFilter('cancelled')}>
                 <Text style={[styles.filterChipText, orderStatusFilter === 'cancelled' && styles.filterChipTextActive]}>कैंसिल</Text>
               </TouchableOpacity>
             </ScrollView>
 
-            {/* Order Search Input */}
             <TextInput 
               style={[styles.input, { marginBottom: 12, backgroundColor: '#FFF' }]} 
               placeholder="🔍 नाम या शहर से ऑर्डर खोजें..." 
@@ -519,6 +537,8 @@ export default function App() {
             ) : (
               filteredOrders.map((ord) => {
                 const badge = getStatusBadge(ord.status);
+                const orderDate = ord.created_at ? new Date(ord.created_at).toLocaleDateString('hi-IN', { hour: '2-digit', minute: '2-digit' }) : '';
+
                 return (
                   <View key={ord.id} style={styles.parcelCard}>
                     <View style={styles.parcelHeader}>
@@ -529,8 +549,9 @@ export default function App() {
                     </View>
                     <Text style={styles.routeText}>🟢 {ord.pickup_address}</Text>
                     <Text style={styles.routeText}>🔴 {ord.drop_address}</Text>
+                    
                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 }}>
-                      <Text style={{ fontSize: 12, color: '#6B7280' }}>पाने वाले: {ord.receiver_name}</Text>
+                      <Text style={{ fontSize: 12, color: '#6B7280' }}>पाने वाले: {ord.receiver_name} {orderDate ? `• ${orderDate}` : ''}</Text>
                       <Text style={{ fontSize: 14, fontWeight: 'bold', color: '#059669' }}>₹{ord.delivery_fee}</Text>
                     </View>
 
@@ -568,6 +589,7 @@ export default function App() {
           </View>
         )}
 
+        {/* TAB 3: TRACK */}
         {activeTab === 'track' && (
           <View>
             <View style={styles.card}>
@@ -672,6 +694,7 @@ export default function App() {
           </View>
         )}
 
+        {/* TAB 4: EXPLORE */}
         {activeTab === 'explore' && (
           <View>
             {riderActiveTasks.length > 0 && (
@@ -712,7 +735,7 @@ export default function App() {
 
             <TextInput 
               style={[styles.input, { marginBottom: 12, backgroundColor: '#FFF' }]} 
-              placeholder="🔍 शहर या लोकेशन खोजें (उदा: आगरा, नोएडा)..." 
+              placeholder="🔍 शहर या लोकेशन खोजें..." 
               value={searchFilter} 
               onChangeText={setSearchFilter} 
             />
@@ -758,6 +781,7 @@ export default function App() {
           </View>
         )}
 
+        {/* TAB 5: VERIFY OTP */}
         {activeTab === 'verify' && (
           <View style={styles.card}>
             <View style={styles.verifyTypeRow}>
@@ -782,6 +806,7 @@ export default function App() {
           </View>
         )}
 
+        {/* TAB 6: WALLET */}
         {activeTab === 'wallet' && (
           <View>
             <View style={styles.walletCard}>
@@ -806,14 +831,15 @@ export default function App() {
           </View>
         )}
 
+        {/* TAB 7: PROFILE WITH LIVE EDIT & CUSTOM PHONE */}
         {activeTab === 'profile' && (
           <View style={styles.card}>
             <View style={styles.profileHeader}>
               <View style={styles.avatar}>
-                <Text style={styles.avatarText}>{profile.name.charAt(0)}</Text>
+                <Text style={styles.avatarText}>{profile.name ? profile.name.charAt(0).toUpperCase() : 'U'}</Text>
               </View>
-              <Text style={styles.profileName}>{profile.name}</Text>
-              <Text style={styles.profilePhone}>+91 {profile.phone}</Text>
+              <Text style={styles.profileName}>{profile.name || 'उपयोगकर्ता'}</Text>
+              <Text style={styles.profilePhone}>{profile.phone ? `+91 ${profile.phone}` : 'नंबर दर्ज नहीं है'}</Text>
             </View>
 
             <Text style={styles.label}>सक्रिय भूमिका (Active Role)</Text>
@@ -822,26 +848,35 @@ export default function App() {
                 style={[styles.roleBtn, profile.role === 'sender' && styles.roleBtnActive]}
                 onPress={() => setProfile({ ...profile, role: 'sender' })}
               >
-                <Text style={[styles.roleBtnText, profile.role === 'sender' && styles.roleBtnTextActive]}>
-                  📦 पार्सल सेंडर
-                </Text>
+                <Text style={[styles.roleBtnText, profile.role === 'sender' && styles.roleBtnTextActive]}>📦 सेंडर</Text>
               </TouchableOpacity>
               <TouchableOpacity 
                 style={[styles.roleBtn, profile.role === 'rider' && styles.roleBtnActive]}
                 onPress={() => setProfile({ ...profile, role: 'rider' })}
               >
-                <Text style={[styles.roleBtnText, profile.role === 'rider' && styles.roleBtnTextActive]}>
-                  🛵 डिलीवरी राइडर
-                </Text>
+                <Text style={[styles.roleBtnText, profile.role === 'rider' && styles.roleBtnTextActive]}>🛵 राइडर</Text>
               </TouchableOpacity>
             </View>
 
-            <View style={styles.infoBox}>
-              <Text style={{ color: '#4B5563', fontSize: 13, lineHeight: 18 }}>
-                ✓ केवाईसी सत्यापित खाता{'\n'}
-                ✓ यूपीआई आईडी लिंक्ड{'\n'}
-                ✓ रेटिंग: 5.0 ★
-              </Text>
+            <View style={{ marginTop: 20, paddingTop: 16, borderTopWidth: 1, borderColor: '#E5E7EB' }}>
+              <Text style={{ fontSize: 14, fontWeight: 'bold', color: '#1F2937', marginBottom: 10 }}>अपनी प्रोफ़ाइल विवरण बदलें</Text>
+              
+              <Text style={styles.label}>आपका नाम</Text>
+              <TextInput style={styles.input} value={editName} onChangeText={setEditName} placeholder="अपना नाम लिखें" />
+
+              <Text style={styles.label}>आपका सही मोबाइल नंबर</Text>
+              <TextInput 
+                style={styles.input} 
+                value={editPhone} 
+                onChangeText={setEditPhone} 
+                placeholder="10 अंकों का नंबर लिखें" 
+                keyboardType="phone-pad"
+                maxLength={10}
+              />
+
+              <TouchableOpacity style={[styles.btnPrimary, { marginTop: 12 }]} onPress={saveProfile}>
+                <Text style={styles.btnText}>प्रोफ़ाइल सुरक्षित करें</Text>
+              </TouchableOpacity>
             </View>
           </View>
         )}
@@ -936,7 +971,7 @@ const styles = StyleSheet.create({
   starIcon: { fontSize: 28 },
   starFilled: { color: '#F59E0B' },
   starEmpty: { color: '#D1D5DB' },
-  profileHeader: { alignItems: 'center', marginBottom: 20 },
+  profileHeader: { alignItems: 'center', marginBottom: 16 },
   avatar: { width: 64, height: 64, borderRadius: 32, backgroundColor: '#4F46E5', alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
   avatarText: { color: '#FFF', fontSize: 28, fontWeight: 'bold' },
   profileName: { fontSize: 18, fontWeight: 'bold', color: '#1F2937' },
@@ -945,6 +980,5 @@ const styles = StyleSheet.create({
   roleBtn: { flex: 1, paddingVertical: 12, borderWidth: 1, borderColor: '#D1D5DB', borderRadius: 8, alignItems: 'center', backgroundColor: '#F9FAFB' },
   roleBtnActive: { borderColor: '#4F46E5', backgroundColor: '#EEF2FF' },
   roleBtnText: { fontSize: 13, fontWeight: 'bold', color: '#6B7280' },
-  roleBtnTextActive: { color: '#4F46E5' },
-  infoBox: { marginTop: 20, padding: 12, backgroundColor: '#F9FAFB', borderRadius: 8, borderWidth: 1, borderColor: '#E5E7EB' }
+  roleBtnTextActive: { color: '#4F46E5' }
 });
