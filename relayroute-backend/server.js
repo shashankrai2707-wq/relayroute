@@ -48,6 +48,16 @@ app.post('/api/parcels/create', async (req, res) => {
   }
 });
 
+// सेंडर के सभी ऑर्डर्स फेच करने का API (नया)
+app.get('/api/sender/orders', async (req, res) => {
+  try {
+    const result = await pool.query("SELECT * FROM parcels ORDER BY created_at DESC;");
+    res.json({ success: true, orders: result.rows });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 app.get('/api/parcels/track/:id', async (req, res) => {
   try {
     const parcelId = req.params.id.trim();
@@ -113,7 +123,6 @@ app.post('/api/parcels/verify-delivery', async (req, res) => {
   }
 });
 
-// 8. रेटिंग एंडपॉइंट (नया)
 app.post('/api/parcels/rate', async (req, res) => {
   try {
     const { parcel_id, rating, feedback } = req.body;

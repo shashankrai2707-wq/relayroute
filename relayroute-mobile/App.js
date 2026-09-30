@@ -4,23 +4,28 @@ import { StyleSheet, Text, View, TextInput, TouchableOpacity, ScrollView, SafeAr
 export default function App() {
   const [activeTab, setActiveTab] = useState('send');
   
+  // Profile State
+  const [profile, setProfile] = useState({ name: 'शशांक कुमार', phone: '9876543210', role: 'sender' });
+
+  // Sender States
   const [category, setCategory] = useState('दस्तावेज़ (Documents)');
   const [weight, setWeight] = useState('2.0');
-  const [fee, setFee] = useState('250');
+  const [fee, setFee] = useState('130');
   const [pickup, setPickup] = useState('सेक्टर 62, नोएडा');
   const [drop, setDrop] = useState('एमजी रोड, आगरा');
   const [receiverName, setReceiverName] = useState('सुरेश कुमार');
   const [receiverPhone, setReceiverPhone] = useState('9876543210');
   const [bookingData, setBookingData] = useState(null);
+  const [myOrders, setMyOrders] = useState([]);
 
+  // Tracking States
   const [trackParcelId, setTrackParcelId] = useState('');
   const [trackedParcel, setTrackedParcel] = useState(null);
-
-  // Rating States
   const [selectedRating, setSelectedRating] = useState(5);
   const [feedbackText, setFeedbackText] = useState('');
   const [ratingSubmitted, setRatingSubmitted] = useState(false);
 
+  // Rider States
   const [availableParcels, setAvailableParcels] = useState([]);
   const [parcelId, setParcelId] = useState('');
   const [otp, setOtp] = useState('');
@@ -28,12 +33,22 @@ export default function App() {
   const [verifyMsg, setVerifyMsg] = useState('');
   const [walletData, setWalletData] = useState({ totalEarnings: 0, completedCount: 0, history: [] });
 
-  const API_URL = 'https://personality-customise-amber-seed.trycloudflare.com';
+  const API_URL = 'https://reprints-both-gene-canvas.trycloudflare.com';
 
   const reqHeaders = {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
     'bypass-tunnel-reminder': '1'
+  };
+
+  const handleWeightChange = (val) => {
+    setWeight(val);
+    const num = parseFloat(val);
+    if (!isNaN(num) && num > 0) {
+      setFee(Math.round(50 + (num * 40)).toString());
+    } else {
+      setFee('50');
+    }
   };
 
   const makeCall = (phone) => {
@@ -43,16 +58,14 @@ export default function App() {
 
   const sendSMS = (phone) => {
     if (!phone) return Alert.alert('त्रुटि', 'फोन नंबर नहीं है');
-    Linking.openURL(`sms:${phone}?body=${encodeURIComponent('नमस्ते, यह RelayRoute डिलीवरी के संबंध में है।')}`).catch(() => Alert.alert('एरर', 'SMS नहीं खुला'));
+    Linking.openURL(`sms:${phone}?body=${encodeURIComponent('नमस्ते, RelayRoute डिलीवरी के संबंध में।')}`);
   };
 
   const openWhatsApp = (phone) => {
     if (!phone) return Alert.alert('त्रुटि', 'फोन नंबर नहीं है');
     const clean = phone.replace(/[^0-9]/g, '');
     const full = clean.length === 10 ? `91${clean}` : clean;
-    Linking.openURL(`whatsapp://send?phone=${full}&text=${encodeURIComponent('नमस्ते, RelayRoute पार्सल के संबंध में संपर्क कर रहे हैं।')}`).catch(() => {
-      Alert.alert('व्हाट्सएप एरर', 'व्हाट्सएप ऐप नहीं मिला');
-    });
+    Linking.openURL(`whatsapp://send?phone=${full}&text=${encodeURIComponent('नमस्ते, RelayRoute पार्सल के संबंध में।')}`);
   };
 
   const openInMaps = (address) => {
@@ -70,6 +83,16 @@ export default function App() {
       if (data.success) setAvailableParcels(data.parcels);
     } catch (err) {
       Alert.alert('त्रुटि', 'पार्सल लोड नहीं हो सके');
+    }
+  };
+
+  const fetchMyOrders = async () => {
+    try {
+      const res = await fetch(`${API_URL}/api/sender/orders`, { headers: reqHeaders });
+      const data = await res.json();
+      if (data.success) setMyOrders(data.orders);
+    } catch (err) {
+      Alert.alert('त्रुटि', 'ऑर्डर्स लोड नहीं हो सके');
     }
   };
 
@@ -103,6 +126,7 @@ export default function App() {
   useEffect(() => {
     if (activeTab === 'explore') fetchAvailableParcels();
     if (activeTab === 'wallet') fetchWalletData();
+    if (activeTab === 'orders') fetchMyOrders();
     if (activeTab === 'track' && trackParcelId) fetchTrackStatus(trackParcelId);
   }, [activeTab]);
 
@@ -117,12 +141,12 @@ export default function App() {
         body: JSON.stringify({
           sender_id: user.id,
           category,
-          weight_kg: parseFloat(weight),
+          weight_kg: parseFloat(weight) || 1,
           pickup_address: pickup,
           drop_address: drop,
           receiver_name: receiverName,
           receiver_phone: receiverPhone,
-          delivery_fee: parseFloat(fee)
+          delivery_fee: parseFloat(fee) || 50
         })
       });
 
@@ -204,6 +228,16 @@ export default function App() {
     return levels[currentStatus] >= levels[stepStatus];
   };
 
+  const getStatusBadge = (status) => {
+    switch (status) {
+      case 'requested': return { text: 'बुक हुआ', color: '#6366F1', bg: '#EEF2FF' };
+      case 'accepted': return { text: 'स्वीकार', color: '#D97706', bg: '#FEF3C7' };
+      case 'in_transit': return { text: 'ट्रांज़िट में', color: '#2563EB', bg: '#EFF6FF' };
+      case 'delivered': return { text: 'डिलीवर हुआ', color: '#059669', bg: '#ECFDF5' };
+      default: return { text: status, color: '#4B5563', bg: '#F3F4F6' };
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
@@ -214,6 +248,9 @@ export default function App() {
       <View style={styles.tabContainer}>
         <TouchableOpacity style={[styles.tab, activeTab === 'send' && styles.activeTab]} onPress={() => setActiveTab('send')}>
           <Text style={[styles.tabText, activeTab === 'send' && styles.activeTabText]}>भेजें</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[styles.tab, activeTab === 'orders' && styles.activeTab]} onPress={() => setActiveTab('orders')}>
+          <Text style={[styles.tabText, activeTab === 'orders' && styles.activeTabText]}>ऑर्डर्स</Text>
         </TouchableOpacity>
         <TouchableOpacity style={[styles.tab, activeTab === 'track' && styles.activeTab]} onPress={() => setActiveTab('track')}>
           <Text style={[styles.tabText, activeTab === 'track' && styles.activeTabText]}>ट्रैक</Text>
@@ -226,6 +263,9 @@ export default function App() {
         </TouchableOpacity>
         <TouchableOpacity style={[styles.tab, activeTab === 'wallet' && styles.activeTab]} onPress={() => setActiveTab('wallet')}>
           <Text style={[styles.tabText, activeTab === 'wallet' && styles.activeTabText]}>वॉलेट</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[styles.tab, activeTab === 'profile' && styles.activeTab]} onPress={() => setActiveTab('profile')}>
+          <Text style={[styles.tabText, activeTab === 'profile' && styles.activeTabText]}>प्रोफ़ाइल</Text>
         </TouchableOpacity>
       </View>
 
@@ -251,16 +291,20 @@ export default function App() {
             <View style={styles.row}>
               <View style={{ flex: 1, marginRight: 8 }}>
                 <Text style={styles.label}>वजन (किग्रा)</Text>
-                <TextInput style={styles.input} value={weight} onChangeText={setWeight} keyboardType="numeric" />
+                <TextInput style={styles.input} value={weight} onChangeText={handleWeightChange} keyboardType="numeric" />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.label}>किराया (₹)</Text>
-                <TextInput style={styles.input} value={fee} onChangeText={setFee} keyboardType="numeric" />
+                <Text style={styles.label}>अनुमानित किराया (₹)</Text>
+                <TextInput style={[styles.input, { backgroundColor: '#ECFDF5', borderColor: '#10B981', fontWeight: 'bold' }]} value={fee} onChangeText={setFee} keyboardType="numeric" />
               </View>
             </View>
 
+            <View style={styles.calcBox}>
+              <Text style={styles.calcText}>💡 बेस फेयर ₹50 + ₹40/kg (वजन बदलते ही किराया खुद अपडेट होगा)</Text>
+            </View>
+
             <TouchableOpacity style={styles.btnPrimary} onPress={handleBooking}>
-              <Text style={styles.btnText}>पार्सल बुक करें</Text>
+              <Text style={styles.btnText}>पार्सल बुक करें (₹{fee})</Text>
             </TouchableOpacity>
 
             {bookingData && (
@@ -270,6 +314,51 @@ export default function App() {
                 <Text style={styles.otpText}>पिकअप OTP: {bookingData.pickup_otp}</Text>
                 <Text style={styles.otpText}>डिलीवरी OTP: {bookingData.delivery_otp}</Text>
               </View>
+            )}
+          </View>
+        )}
+
+        {/* TAB: MY ORDERS */}
+        {activeTab === 'orders' && (
+          <View>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#1F2937' }}>मेरे बुक किए गए ऑर्डर्स</Text>
+              <TouchableOpacity onPress={fetchMyOrders}>
+                <Text style={{ color: '#4F46E5', fontWeight: 'bold' }}>रीफ़्रेश</Text>
+              </TouchableOpacity>
+            </View>
+
+            {myOrders.length === 0 ? (
+              <View style={styles.emptyBox}><Text style={{ color: '#6B7280' }}>आपने अभी तक कोई पार्सल बुक नहीं किया है।</Text></View>
+            ) : (
+              myOrders.map((ord) => {
+                const badge = getStatusBadge(ord.status);
+                return (
+                  <View key={ord.id} style={styles.parcelCard}>
+                    <View style={styles.parcelHeader}>
+                      <Text style={styles.categoryBadge}>{ord.category}</Text>
+                      <View style={{ backgroundColor: badge.bg, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4 }}>
+                        <Text style={{ color: badge.color, fontSize: 11, fontWeight: 'bold' }}>{badge.text}</Text>
+                      </View>
+                    </View>
+                    <Text style={styles.routeText}>🟢 {ord.pickup_address}</Text>
+                    <Text style={styles.routeText}>🔴 {ord.drop_address}</Text>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 }}>
+                      <Text style={{ fontSize: 12, color: '#6B7280' }}>पाने वाले: {ord.receiver_name}</Text>
+                      <Text style={{ fontSize: 14, fontWeight: 'bold', color: '#059669' }}>₹{ord.delivery_fee}</Text>
+                    </View>
+                    <TouchableOpacity 
+                      style={styles.orderTrackBtn}
+                      onPress={() => {
+                        setTrackParcelId(ord.id);
+                        setActiveTab('track');
+                      }}
+                    >
+                      <Text style={styles.orderTrackBtnText}>📍 लाइव ट्रैक करें</Text>
+                    </TouchableOpacity>
+                  </View>
+                );
+              })
             )}
           </View>
         )}
@@ -321,7 +410,6 @@ export default function App() {
                   </View>
                 </View>
 
-                {/* Delivered होने पर 5-Star Rating Card */}
                 {trackedParcel.status === 'delivered' && (
                   <View style={styles.ratingCard}>
                     <Text style={styles.ratingTitle}>⭐ डिलीवरी अनुभव कैसा रहा?</Text>
@@ -334,15 +422,13 @@ export default function App() {
                         <View style={styles.starRow}>
                           {[1, 2, 3, 4, 5].map((star) => (
                             <TouchableOpacity key={star} onPress={() => setSelectedRating(star)}>
-                              <Text style={[styles.starIcon, selectedRating >= star ? styles.starFilled : styles.starEmpty]}>
-                                ★
-                              </Text>
+                              <Text style={[styles.starIcon, selectedRating >= star ? styles.starFilled : styles.starEmpty]}>★</Text>
                             </TouchableOpacity>
                           ))}
                         </View>
                         <TextInput
                           style={[styles.input, { marginTop: 8 }]}
-                          placeholder="राइडर के लिए कोई संदेश या फ़ीडबैक लिखें..."
+                          placeholder="राइडर के लिए फ़ीडबैक लिखें..."
                           value={feedbackText}
                           onChangeText={setFeedbackText}
                         />
@@ -470,12 +556,52 @@ export default function App() {
                 <View key={item.id} style={styles.historyCard}>
                   <View style={{ flex: 1 }}>
                     <Text style={{ fontWeight: 'bold', color: '#111827', fontSize: 14 }}>{item.pickup_address} → {item.drop_address}</Text>
-                    {item.rating && <Text style={{ color: '#D97706', fontSize: 12, marginTop: 2 }}>{'★'.repeat(item.rating)} ({item.feedback || 'शानदार சேவை'})</Text>}
+                    {item.rating && <Text style={{ color: '#D97706', fontSize: 12, marginTop: 2 }}>{'★'.repeat(item.rating)} ({item.feedback || 'शानदार सेवा'})</Text>}
                   </View>
                   <Text style={styles.historyFee}>+₹{item.delivery_fee}</Text>
                 </View>
               ))
             )}
+          </View>
+        )}
+
+        {activeTab === 'profile' && (
+          <View style={styles.card}>
+            <View style={styles.profileHeader}>
+              <View style={styles.avatar}>
+                <Text style={styles.avatarText}>{profile.name.charAt(0)}</Text>
+              </View>
+              <Text style={styles.profileName}>{profile.name}</Text>
+              <Text style={styles.profilePhone}>+91 {profile.phone}</Text>
+            </View>
+
+            <Text style={styles.label}>सक्रिय भूमिका (Active Role)</Text>
+            <View style={styles.roleContainer}>
+              <TouchableOpacity 
+                style={[styles.roleBtn, profile.role === 'sender' && styles.roleBtnActive]}
+                onPress={() => setProfile({ ...profile, role: 'sender' })}
+              >
+                <Text style={[styles.roleBtnText, profile.role === 'sender' && styles.roleBtnTextActive]}>
+                  📦 पार्सल सेंडर
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[styles.roleBtn, profile.role === 'rider' && styles.roleBtnActive]}
+                onPress={() => setProfile({ ...profile, role: 'rider' })}
+              >
+                <Text style={[styles.roleBtnText, profile.role === 'rider' && styles.roleBtnTextActive]}>
+                  🛵 डिलीवरी राइडर
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.infoBox}>
+              <Text style={{ color: '#4B5563', fontSize: 13, lineHeight: 18 }}>
+                ✓ केवाईसी सत्यापित खाता{'\n'}
+                ✓ यूपीआई आईडी लिंक्ड{'\n'}
+                ✓ रेटिंग: 5.0 ★
+              </Text>
+            </View>
           </View>
         )}
       </ScrollView>
@@ -491,7 +617,7 @@ const styles = StyleSheet.create({
   tabContainer: { flexDirection: 'row', backgroundColor: '#FFF', borderBottomWidth: 1, borderColor: '#E5E7EB' },
   tab: { flex: 1, paddingVertical: 12, alignItems: 'center' },
   activeTab: { borderBottomWidth: 2, borderColor: '#4F46E5' },
-  tabText: { color: '#6B7280', fontWeight: '600', fontSize: 12 },
+  tabText: { color: '#6B7280', fontWeight: '600', fontSize: 10 },
   activeTabText: { color: '#4F46E5' },
   content: { padding: 16 },
   card: { backgroundColor: '#FFF', padding: 16, borderRadius: 12, elevation: 2 },
@@ -503,6 +629,8 @@ const styles = StyleSheet.create({
   label: { fontSize: 12, fontWeight: '600', color: '#4B5563', marginBottom: 4, marginTop: 8 },
   input: { borderWidth: 1, borderColor: '#D1D5DB', borderRadius: 8, padding: 10, fontSize: 14, backgroundColor: '#F9FAFB' },
   row: { flexDirection: 'row' },
+  calcBox: { backgroundColor: '#F0FDF4', padding: 8, borderRadius: 6, marginTop: 8, borderWidth: 1, borderColor: '#DCFCE7' },
+  calcText: { fontSize: 11, color: '#166534', fontWeight: '600' },
   btnPrimary: { backgroundColor: '#4F46E5', padding: 14, borderRadius: 8, alignItems: 'center', marginTop: 16 },
   btnSecondary: { backgroundColor: '#4F46E5', padding: 10, borderRadius: 8, alignItems: 'center', marginTop: 10 },
   btnSuccess: { backgroundColor: '#10B981', padding: 14, borderRadius: 8, alignItems: 'center', marginTop: 16 },
@@ -528,6 +656,8 @@ const styles = StyleSheet.create({
   mapRouteBtnText: { color: '#1D4ED8', fontWeight: 'bold', fontSize: 12 },
   acceptBtn: { marginTop: 8, backgroundColor: '#4F46E5', padding: 10, borderRadius: 8, alignItems: 'center' },
   acceptBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 13 },
+  orderTrackBtn: { marginTop: 10, backgroundColor: '#EEF2FF', padding: 10, borderRadius: 8, alignItems: 'center', borderWidth: 1, borderColor: '#C7D2FE' },
+  orderTrackBtnText: { color: '#4F46E5', fontWeight: 'bold', fontSize: 12 },
   walletCard: { backgroundColor: '#1E1B4B', padding: 20, borderRadius: 16, marginBottom: 20, elevation: 4 },
   walletTitle: { color: '#C7D2FE', fontSize: 13, fontWeight: '600' },
   walletBalance: { color: '#FFF', fontSize: 32, fontWeight: 'bold', marginVertical: 6 },
@@ -555,5 +685,16 @@ const styles = StyleSheet.create({
   starRow: { flexDirection: 'row', justifyContent: 'center', gap: 8, marginVertical: 6 },
   starIcon: { fontSize: 28 },
   starFilled: { color: '#F59E0B' },
-  starEmpty: { color: '#D1D5DB' }
+  starEmpty: { color: '#D1D5DB' },
+  profileHeader: { alignItems: 'center', marginBottom: 20 },
+  avatar: { width: 64, height: 64, borderRadius: 32, backgroundColor: '#4F46E5', alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
+  avatarText: { color: '#FFF', fontSize: 28, fontWeight: 'bold' },
+  profileName: { fontSize: 18, fontWeight: 'bold', color: '#1F2937' },
+  profilePhone: { fontSize: 13, color: '#6B7280', marginTop: 2 },
+  roleContainer: { flexDirection: 'row', gap: 10, marginTop: 8 },
+  roleBtn: { flex: 1, paddingVertical: 12, borderWidth: 1, borderColor: '#D1D5DB', borderRadius: 8, alignItems: 'center', backgroundColor: '#F9FAFB' },
+  roleBtnActive: { borderColor: '#4F46E5', backgroundColor: '#EEF2FF' },
+  roleBtnText: { fontSize: 13, fontWeight: 'bold', color: '#6B7280' },
+  roleBtnTextActive: { color: '#4F46E5' },
+  infoBox: { marginTop: 20, padding: 12, backgroundColor: '#F9FAFB', borderRadius: 8, borderWidth: 1, borderColor: '#E5E7EB' }
 });
