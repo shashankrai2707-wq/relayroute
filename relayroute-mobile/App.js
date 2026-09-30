@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, TextInput, TouchableOpacity, ScrollView, SafeAreaView, Alert, Linking, Switch, Share, Vibration } from 'react-native';
+import { StyleSheet, Text, View, TextInput, TouchableOpacity, ScrollView, Alert, Linking, Switch, Share, Vibration } from 'react-native';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('send');
   
-  // Profile State with Live Edit
+  // Profile State
   const [profile, setProfile] = useState({ name: '', phone: '', role: 'sender' });
   const [editName, setEditName] = useState('');
   const [editPhone, setEditPhone] = useState('');
@@ -391,7 +391,7 @@ export default function App() {
   );
 
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>RelayRoute</Text>
         <Text style={styles.headerSub}>पीयर-टू-पीयर पार्सल नेटवर्क</Text>
@@ -565,6 +565,15 @@ export default function App() {
                       >
                         <Text style={styles.orderTrackBtnText}>📍 ट्रैक</Text>
                       </TouchableOpacity>
+
+                      {ord.status === 'delivered' && (
+                        <TouchableOpacity 
+                          style={[styles.orderTrackBtn, { flex: 1, backgroundColor: '#FEF3C7', borderColor: '#FCD34D' }]}
+                          onPress={() => Linking.openURL(`http://localhost:5000/api/invoice/${ord.id}`)}
+                        >
+                          <Text style={[styles.orderTrackBtnText, { color: '#B45309' }]}>📄 रसीद</Text>
+                        </TouchableOpacity>
+                      )}
 
                       <TouchableOpacity 
                         style={[styles.orderTrackBtn, { flex: 1, backgroundColor: '#ECFDF5', borderColor: '#A7F3D0' }]}
@@ -789,7 +798,7 @@ export default function App() {
                 <Text style={[styles.typeBtnText, verifyType === 'pickup' && styles.typeBtnTextActive]}>1. पिकअप OTP</Text>
               </TouchableOpacity>
               <TouchableOpacity style={[styles.typeBtn, verifyType === 'delivery' && styles.typeBtnActive]} onPress={() => setVerifyType('delivery')}>
-                <Text style={[styles.typeBtnText, verifyType === 'delivery' && styles.typeBtnTextActive]}>2. डिलीवरी OTP</Text>
+                <Text style={[styles.typeBtnText, verifyType === 'delivery' && styles.typeBtnActive]}>2. डिलीवरी OTP</Text>
               </TouchableOpacity>
             </View>
 
@@ -831,7 +840,7 @@ export default function App() {
           </View>
         )}
 
-        {/* TAB 7: PROFILE WITH LIVE EDIT & CUSTOM PHONE */}
+        {/* TAB 7: PROFILE */}
         {activeTab === 'profile' && (
           <View style={styles.card}>
             <View style={styles.profileHeader}>
@@ -881,7 +890,7 @@ export default function App() {
           </View>
         )}
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 
