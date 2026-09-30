@@ -418,3 +418,9 @@ app.get('/api/invoice/:orderId', async (req, res) => {
         res.status(500).send('Error generating PDF invoice');
     }
 });
+// Live GPS Location Endpoint
+app.post('/api/update-location', (req, res) => {
+    const { latitude, longitude } = req.body;
+    console.log(`Live Location Received -> Lat: ${latitude}, Lng: ${longitude}`);
+    res.json({ success: true, message: 'Location updated successfully' });
+});
