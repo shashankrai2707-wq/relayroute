@@ -8,10 +8,8 @@ app.use(express.json());
 app.use(express.static('public'));
 
 const pool = new Pool({
-  user: 'u0_a78',
-  host: 'localhost',
-  database: 'postgres',
-  port: 5432,
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false }
 });
 
 // यूज़र प्रोफ़ाइल फ़ेच या डिफ़ॉल्ट बनाना
@@ -505,5 +503,66 @@ app.post('/api/wallet/update', async (req, res) => {
     } catch (err) {
         console.error(err);
         res.status(500).json({ success: false, message: 'Database error' });
+    }
+});
+
+// 1. Live Map Tracking: Update Rider Location
+app.post('/api/rider/location', async (req, res) => {
+    try {
+        const { rider_id, parcel_id, latitude, longitude } = req.body;
+        await pool.query(
+            `INSERT INTO rider_locations (rider_id, parcel_id, latitude, longitude, updated_at)
+             VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
+             ON CONFLICT (rider_id)
+             DO UPDATE SET latitude = $3, longitude = $4, parcel_id = $2, updated_at = CURRENT_TIMESTAMP`,
+            [rider_id, parcel_id, latitude, longitude]
+        );
+        res.json({ success: true, message: 'Location updated successfully' });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ success: false, message: 'Database error' });
+    }
+});
+
+// 2. Live Map Tracking: Get Rider/Parcel Location
+app.get('/api/parcels/location/:id', async (req, res) => {
+    try {
+        const parcelId = req.params.id;
+        const result = await pool.query(
+            `SELECT * FROM rider_locations WHERE parcel_id = $1 ORDER BY updated_at DESC LIMIT 1`,
+            [parcelId]
+        );
+        if (result.rows.length === 0) {
+            return res.status(404).json({ success: false, message: 'Location not found' });
+        }
+        res.json({ success: true, location: result.rows[0] });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ success: false, message: 'Database error' });
+    }
+});
+
+// 3. Online UPI Payment Integration Endpoint
+app.post('/api/payment/upi', async (req, res) => {
+    try {
+        const { user_id, amount, upi_id, parcel_id } = req.body;
+        // Mocking UPI payment gateway verification
+        const transactionId = 'UPI_' + Date.now();
+        
+        // Log payment in database
+        await pool.query(
+            `INSERT INTO payments (user_id, parcel_id, amount, upi_id, transaction_id, status, created_at)
+             VALUES ($1, $2, $3, $4, $5, 'SUCCESS', CURRENT_TIMESTAMP)`,
+            [user_id, parcel_id, amount, upi_id, transactionId]
+        );
+
+        res.json({ 
+            success: true, 
+            message: 'UPI Payment successful', 
+            transaction_id: transactionId 
+        });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ success: false, message: 'Payment processing error' });
     }
 });
