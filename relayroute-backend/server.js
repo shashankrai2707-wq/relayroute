@@ -457,9 +457,6 @@ app.get('/api/wallet/:userId', (req, res) => {
     const balance = userWallets[userId] || 0.00;
     res.json({ success: true, balance: balance });
 });
-// Database Pool import
-const pool = require('./db');
-
 // 1. Get Real Wallet Balance from Neon DB
 app.get('/api/wallet/:userId', async (req, res) => {
     try {
