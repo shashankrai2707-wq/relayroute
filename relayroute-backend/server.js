@@ -73,7 +73,7 @@ app.post('/api/parcels/create', async (req, res) => {
 
 app.get('/api/sender/orders', async (req, res) => {
   try {
-    const result = await pool.query("SELECT * FROM parcels ORDER BY created_at DESC;");
+    const result = await pool.query("SELECT * FROM orders ORDER BY created_at DESC;");
     res.json({ success: true, orders: result.rows });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -83,7 +83,7 @@ app.get('/api/sender/orders', async (req, res) => {
 app.post('/api/parcels/cancel', async (req, res) => {
   try {
     const parcel_id = req.body.parcel_id ? req.body.parcel_id.trim() : "";
-    const check = await pool.query("SELECT status FROM parcels WHERE id = $1;", [parcel_id]);
+    const check = await pool.query("SELECT status FROM orders WHERE id = $1;", [parcel_id]);
     if (check.rows.length === 0) return res.status(404).json({ success: false, error: 'पार्सल नहीं मिला' });
     
     if (check.rows[0].status !== 'requested') {
@@ -100,7 +100,7 @@ app.post('/api/parcels/cancel', async (req, res) => {
 app.get('/api/parcels/track/:id', async (req, res) => {
   try {
     const parcelId = req.params.id.trim();
-    const result = await pool.query("SELECT * FROM parcels WHERE id = $1;", [parcelId]);
+    const result = await pool.query("SELECT * FROM orders WHERE id = $1;", [parcelId]);
     if (result.rows.length === 0) return res.status(404).json({ success: false, error: 'Parcel नहीं मिला' });
     res.json({ success: true, parcel: result.rows[0] });
   } catch (err) {
@@ -110,7 +110,7 @@ app.get('/api/parcels/track/:id', async (req, res) => {
 
 app.get('/api/parcels/available', async (req, res) => {
   try {
-    const result = await pool.query("SELECT * FROM parcels WHERE status = 'requested' ORDER BY created_at DESC;");
+    const result = await pool.query("SELECT * FROM orders WHERE status = 'requested' ORDER BY created_at DESC;");
     res.json({ success: true, parcels: result.rows });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -119,7 +119,7 @@ app.get('/api/parcels/available', async (req, res) => {
 
 app.get('/api/rider/active-tasks', async (req, res) => {
   try {
-    const result = await pool.query("SELECT * FROM parcels WHERE status IN ('accepted', 'in_transit') ORDER BY created_at DESC;");
+    const result = await pool.query("SELECT * FROM orders WHERE status IN ('accepted', 'in_transit') ORDER BY created_at DESC;");
     res.json({ success: true, tasks: result.rows });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -140,7 +140,7 @@ app.post('/api/parcels/verify-pickup', async (req, res) => {
   try {
     const parcel_id = req.body.parcel_id ? req.body.parcel_id.trim() : "";
     const otp = req.body.otp ? req.body.otp.trim() : "";
-    const result = await pool.query("SELECT * FROM parcels WHERE id = $1;", [parcel_id]);
+    const result = await pool.query("SELECT * FROM orders WHERE id = $1;", [parcel_id]);
     if (result.rows.length === 0) return res.status(404).json({ success: false, error: 'पार्सल नहीं मिला' });
 
     const parcel = result.rows[0];
@@ -157,7 +157,7 @@ app.post('/api/parcels/verify-delivery', async (req, res) => {
   try {
     const parcel_id = req.body.parcel_id ? req.body.parcel_id.trim() : "";
     const otp = req.body.otp ? req.body.otp.trim() : "";
-    const result = await pool.query("SELECT * FROM parcels WHERE id = $1;", [parcel_id]);
+    const result = await pool.query("SELECT * FROM orders WHERE id = $1;", [parcel_id]);
     if (result.rows.length === 0) return res.status(404).json({ success: false, error: 'पार्सल नहीं मिला' });
 
     const parcel = result.rows[0];
@@ -183,7 +183,7 @@ app.post('/api/parcels/rate', async (req, res) => {
 
 app.get('/api/rider/wallet', async (req, res) => {
   try {
-    const deliveredResult = await pool.query("SELECT * FROM parcels WHERE status = 'delivered' ORDER BY created_at DESC;");
+    const deliveredResult = await pool.query("SELECT * FROM orders WHERE status = 'delivered' ORDER BY created_at DESC;");
     const parcels = deliveredResult.rows;
     const totalEarnings = parcels.reduce((sum, item) => sum + Number(item.delivery_fee || 0), 0);
     res.json({ success: true, totalEarnings, completedCount: parcels.length, history: parcels });
@@ -196,7 +196,7 @@ app.get('/api/rider/wallet', async (req, res) => {
 app.get('/api/invoice/:id', async (req, res) => {
   try {
     const parcelId = req.params.id.trim();
-    const result = await pool.query("SELECT * FROM parcels WHERE id = $1;", [parcelId]);
+    const result = await pool.query("SELECT * FROM orders WHERE id = $1;", [parcelId]);
     if (result.rows.length === 0) return res.status(404).send('<h1>इनवॉइस नहीं मिली</h1>');
 
     const p = result.rows[0];
@@ -271,7 +271,7 @@ app.get('/api/invoice/:id', async (req, res) => {
 // एडमिन ऑपरेशन्स
 app.get('/admin/cleanup', async (req, res) => {
   try {
-    await pool.query("DELETE FROM parcels WHERE status IN ('delivered', 'cancelled');");
+    await pool.query("DELETE FROM orders WHERE status IN ('delivered', 'cancelled');");
     res.redirect('/admin');
   } catch (err) {
     res.status(500).send("Cleanup error: " + err.message);
@@ -297,7 +297,7 @@ app.get('/admin/add-sample', async (req, res) => {
 
 app.get('/admin', async (req, res) => {
   try {
-    const all = await pool.query("SELECT * FROM parcels ORDER BY created_at DESC;");
+    const all = await pool.query("SELECT * FROM orders ORDER BY created_at DESC;");
     const parcels = all.rows;
     const total = parcels.length;
     const active = parcels.filter(p => ['requested', 'accepted', 'in_transit'].includes(p.status)).length;
