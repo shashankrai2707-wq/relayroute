@@ -90,7 +90,7 @@ app.post('/api/parcels/cancel', async (req, res) => {
       return res.status(400).json({ success: false, error: 'राइडर द्वारा स्वीकार या पिक किए गए पार्सल को कैंसिल नहीं किया जा सकता।' });
     }
 
-    await pool.query("UPDATE parcels SET status = 'cancelled' WHERE id = $1;", [parcel_id]);
+    await pool.query("UPDATE orders SET status = 'cancelled' WHERE id = $1;", [parcel_id]);
     res.json({ success: true, message: 'पार्सल सफलतापूर्वक कैंसिल कर दिया गया।' });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -129,7 +129,7 @@ app.get('/api/rider/active-tasks', async (req, res) => {
 app.post('/api/parcels/accept', async (req, res) => {
   try {
     const parcel_id = req.body.parcel_id ? req.body.parcel_id.trim() : "";
-    await pool.query("UPDATE parcels SET status = 'accepted' WHERE id = $1;", [parcel_id]);
+    await pool.query("UPDATE orders SET status = 'accepted' WHERE id = $1;", [parcel_id]);
     res.json({ success: true, message: 'पार्सल स्वीकार कर लिया गया! अब पिकअप के लिए रवाना हों।' });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -146,7 +146,7 @@ app.post('/api/parcels/verify-pickup', async (req, res) => {
     const parcel = result.rows[0];
     if (parcel.pickup_otp !== otp) return res.status(400).json({ success: false, error: 'अमान्य पिकअप OTP' });
 
-    await pool.query("UPDATE parcels SET status = 'in_transit' WHERE id = $1;", [parcel_id]);
+    await pool.query("UPDATE orders SET status = 'in_transit' WHERE id = $1;", [parcel_id]);
     res.json({ success: true, message: '✓ पिकअप वेरिफाई हुआ! पार्सल अब ट्रांज़िट में है।' });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -164,7 +164,7 @@ app.post('/api/parcels/verify-delivery', async (req, res) => {
     if (parcel.status !== 'in_transit') return res.status(400).json({ success: false, error: 'पार्सल अभी ट्रांज़िट में नहीं है' });
     if (parcel.delivery_otp !== otp) return res.status(400).json({ success: false, error: 'अमान्य डिलीवरी OTP' });
 
-    await pool.query("UPDATE parcels SET status = 'delivered' WHERE id = $1;", [parcel_id]);
+    await pool.query("UPDATE orders SET status = 'delivered' WHERE id = $1;", [parcel_id]);
     res.json({ success: true, message: `🎉 डिलीवरी सफल! ₹${parcel.delivery_fee} का भुगतान प्रोसेस हुआ।` });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -174,7 +174,7 @@ app.post('/api/parcels/verify-delivery', async (req, res) => {
 app.post('/api/parcels/rate', async (req, res) => {
   try {
     const { parcel_id, rating, feedback } = req.body;
-    await pool.query("UPDATE parcels SET rating = $1, feedback = $2 WHERE id = $3;", [rating, feedback, parcel_id]);
+    await pool.query("UPDATE orders SET rating = $1, feedback = $2 WHERE id = $3;", [rating, feedback, parcel_id]);
     res.json({ success: true, message: 'रेटिंग दर्ज हो गई!' });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
