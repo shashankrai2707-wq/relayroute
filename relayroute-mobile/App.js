@@ -45,7 +45,7 @@ export default function App() {
   const [verifyMsg, setVerifyMsg] = useState('');
   const [walletData, setWalletData] = useState({ totalEarnings: 0, completedCount: 0, history: [] });
 
-  const API_URL = 'https://reprints-both-gene-canvas.trycloudflare.com';
+  const API_URL = 'https://relayroute.onrender.com';
 
   const reqHeaders = {
     'Content-Type': 'application/json',
@@ -569,7 +569,7 @@ export default function App() {
                       {ord.status === 'delivered' && (
                         <TouchableOpacity 
                           style={[styles.orderTrackBtn, { flex: 1, backgroundColor: '#FEF3C7', borderColor: '#FCD34D' }]}
-                          onPress={() => Linking.openURL(`http://localhost:5000/api/invoice/${ord.id}`)}
+                          onPress={() => Linking.openURL(`https://relayroute.onrender.com/api/invoice/${ord.id}`)}
                         >
                           <Text style={[styles.orderTrackBtnText, { color: '#B45309' }]}>📄 रसीद</Text>
                         </TouchableOpacity>
