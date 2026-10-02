@@ -1,5 +1,3 @@
-const connectDB = require('./db');
-connectDB();
 const express = require('express');
 const cors = require('cors');
 const { Pool } = require('pg');
@@ -10,8 +8,8 @@ app.use(express.json());
 app.use(express.static('public'));
 
 const pool = new Pool({
-  user: 'u0_a78', host: '127.0.0.1', database: 'relayroute', port: 5432,
-  ssl: false
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false }
 });
 
 // यूज़र प्रोफ़ाइल फ़ेच या डिफ़ॉल्ट बनाना

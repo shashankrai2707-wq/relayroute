@@ -1,0 +1,3 @@
+DATABASE_URL=postgresql://u0_a78@127.0.0.1:5432/relayroute
+PORT=5000
+MONGO_URI=mongodb+srv://shashankrai2707_db_user :password_Pr15rKDbrvq9CX0X.9pngena.mongodb.net/relayroute?appName=Cluster0

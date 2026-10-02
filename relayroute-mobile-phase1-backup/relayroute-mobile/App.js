@@ -45,7 +45,7 @@ export default function App() {
   const [verifyMsg, setVerifyMsg] = useState('');
   const [walletData, setWalletData] = useState({ totalEarnings: 0, completedCount: 0, history: [] });
 
-  const API_URL = 'https://companion-gave-obvious-companies.trycloudflare.com';
+  const API_URL = 'https://relayroute.onrender.com';
 
   const reqHeaders = {
     'Content-Type': 'application/json',
@@ -554,32 +554,6 @@ export default function App() {
                       <Text style={{ fontSize: 12, color: '#6B7280' }}>पाने वाले: {ord.receiver_name} {orderDate ? `• ${orderDate}` : ''}</Text>
                       <Text style={{ fontSize: 14, fontWeight: 'bold', color: '#059669' }}>₹{ord.delivery_fee}</Text>
                     </View>
-                    {/* RIDER MATCHING UI INTEGRATION */}
-                    {ord.status === 'pending' && (
-                      <View style={{ marginTop: 12, padding: 12, backgroundColor: '#FFFBEB', borderRadius: 8, borderWidth: 1, borderColor: '#FDE68A' }}>
-                        <Text style={{ fontSize: 13, fontWeight: 'bold', color: '#92400E', marginBottom: 6 }}>🤝 संभावित राइडर मिला!</Text>
-                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <View>
-                            <Text style={{ fontSize: 14, color: '#1F2937', fontWeight: 'bold' }}>Ramesh Kumar <Text style={{color: '#D97706'}}>★ 4.8</Text></Text>
-                            <Text style={{ fontSize: 12, color: '#6B7280' }}>सूरत से गाज़ीपुर (Oct 10-11, 2026)</Text>
-                          </View>
-                          <TouchableOpacity 
-                            style={{ backgroundColor: '#D97706', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 6 }}
-                            onPress={() => Alert.alert('Rider Accepted', 'आपने इस राइडर को अप्रूव कर दिया है।')}
-                          >
-                            <Text style={{ color: '#FFF', fontSize: 12, fontWeight: 'bold' }}>Accept</Text>
-                          </TouchableOpacity>
-                        </View>
-                      </View>
-                    )}
-                    {ord.status === 'accepted' && (
-                      <View style={{ marginTop: 12, padding: 10, backgroundColor: '#ECFDF5', borderRadius: 8, borderWidth: 1, borderColor: '#A7F3D0', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <Text style={{ fontSize: 13, color: '#065F46', fontWeight: 'bold' }}>✓ राइडर असाइन हो गया</Text>
-                        <TouchableOpacity onPress={() => Alert.alert('Chat', 'राइडर से चैट शुरू की जा रही है...')}>
-                          <Text style={{ color: '#059669', fontSize: 13, fontWeight: 'bold' }}>💬 चैट करें</Text>
-                        </TouchableOpacity>
-                      </View>
-                    )}
 
                     <View style={{ flexDirection: 'row', gap: 6, marginTop: 10 }}>
                       <TouchableOpacity 
@@ -871,29 +845,6 @@ export default function App() {
               <Text style={styles.walletBalance}>₹{walletData.totalEarnings}</Text>
               <Text style={styles.walletSub}>सफल डिलीवरी: {walletData.completedCount}</Text>
             </View>
-
-            {/* UPI PAYMENT UI INTEGRATION */}
-            <View style={{ marginTop: 16, backgroundColor: '#F0FDF4', borderColor: '#10B981', borderWidth: 1, padding: 16, borderRadius: 8, marginBottom: 16 }}>
-              <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#065F46', marginBottom: 12 }}>💳 UPI से पैसे डालें / पेमेंट करें</Text>
-              
-              <TextInput 
-                style={{borderWidth: 1, borderColor: '#D1D5DB', borderRadius: 8, padding: 10, marginBottom: 10, backgroundColor: '#FFF'}} 
-                placeholder="अमाउंट (₹)" 
-                keyboardType="numeric" 
-              />
-              <TextInput 
-                style={{borderWidth: 1, borderColor: '#D1D5DB', borderRadius: 8, padding: 10, marginBottom: 10, backgroundColor: '#FFF'}} 
-                placeholder="UPI ID (उदा. user@paytm)" 
-              />
-              
-              <TouchableOpacity 
-                style={{backgroundColor: '#10B981', paddingVertical: 12, borderRadius: 8, alignItems: 'center'}} 
-                onPress={() => Alert.alert('UPI Payment', 'पेमेंट प्रोसेस हो रहा है... (Backend API: /api/payment/upi)')}
-              >
-                <Text style={{color: '#FFF', fontSize: 15, fontWeight: 'bold'}}>Pay via UPI</Text>
-              </TouchableOpacity>
-            </View>
-
             <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#1F2937', marginBottom: 12 }}>डिलीवरी हिस्ट्री</Text>
             {walletData.history.length === 0 ? (
               <View style={styles.emptyBox}><Text style={{ color: '#6B7280' }}>कोई डिलीवरी पूरी नहीं हुई।</Text></View>
