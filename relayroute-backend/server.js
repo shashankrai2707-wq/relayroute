@@ -1,52 +1,87 @@
-const connectDB = require('./db');
-connectDB();
 const express = require('express');
 const cors = require('cors');
-const { Pool } = require('pg');
+const mongoose = require('mongoose');
+const connectDB = require('./db');
+
+connectDB();
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
 
-const pool = new Pool({
-  user: 'u0_a78', host: '127.0.0.1', database: 'relayroute', port: 5432,
-  ssl: false
-});
+const userSchema = new mongoose.Schema({
+  name: { type: String, default: 'उपयोगकर्ता' },
+  phone: { type: String, default: '' },
+  role: { type: String, default: 'sender' }
+}, { timestamps: true });
+const User = mongoose.model('User', userSchema);
 
-// यूज़र प्रोफ़ाइल फ़ेच या डिफ़ॉल्ट बनाना
+const orderSchema = new mongoose.Schema({
+  sender_id: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  category: String,
+  weight_kg: Number,
+  pickup_address: String,
+  drop_address: String,
+  receiver_name: String,
+  receiver_phone: String,
+  delivery_fee: Number,
+  pickup_otp: String,
+  delivery_otp: String,
+  status: { type: String, default: 'requested' },
+  rating: { type: Number, default: null },
+  feedback: { type: String, default: '' }
+}, { timestamps: true });
+const Order = mongoose.model('Order', orderSchema);
+
+const walletSchema = new mongoose.Schema({
+  user_id: { type: String, unique: true },
+  balance: { type: Number, default: 0.00 }
+}, { timestamps: true });
+const Wallet = mongoose.model('Wallet', walletSchema);
+
+const riderLocationSchema = new mongoose.Schema({
+  rider_id: { type: String, unique: true },
+  parcel_id: String,
+  latitude: Number,
+  longitude: Number
+}, { timestamps: true });
+const RiderLocation = mongoose.model('RiderLocation', riderLocationSchema);
+
+const paymentSchema = new mongoose.Schema({
+  user_id: String,
+  parcel_id: String,
+  amount: Number,
+  upi_id: String,
+  transaction_id: String,
+  status: { type: String, default: 'SUCCESS' }
+}, { timestamps: true });
+const Payment = mongoose.model('Payment', paymentSchema);
+
 app.get('/api/user/default', async (req, res) => {
   try {
-    let result = await pool.query("SELECT * FROM users LIMIT 1;");
-    if (result.rows.length === 0) {
-      result = await pool.query(
-        "INSERT INTO users (name, phone, role) VALUES ($1, $2, $3) RETURNING *;",
-        ['उपयोगकर्ता', '', 'sender']
-      );
+    let user = await User.findOne();
+    if (!user) {
+      user = await User.create({ name: 'उपयोगकर्ता', phone: '', role: 'sender' });
     }
-    res.json(result.rows[0]);
+    res.json(user);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// यूज़र प्रोफ़ाइल अपडेट करना
 app.post('/api/user/update', async (req, res) => {
   try {
     const { name, phone } = req.body;
-    let result = await pool.query("SELECT id FROM users LIMIT 1;");
-    if (result.rows.length === 0) {
-      result = await pool.query(
-        "INSERT INTO users (name, phone, role) VALUES ($1, $2, 'sender') RETURNING *;",
-        [name, phone]
-      );
+    let user = await User.findOne();
+    if (!user) {
+      user = await User.create({ name, phone, role: 'sender' });
     } else {
-      result = await pool.query(
-        "UPDATE users SET name = $1, phone = $2 WHERE id = $3 RETURNING *;",
-        [name, phone, result.rows[0].id]
-      );
+      user.name = name;
+      user.phone = phone;
+      await user.save();
     }
-    res.json({ success: true, user: result.rows[0] });
+    res.json({ success: true, user });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -58,14 +93,11 @@ app.post('/api/parcels/create', async (req, res) => {
     const pickup_otp = Math.floor(1000 + Math.random() * 9000).toString();
     const delivery_otp = Math.floor(1000 + Math.random() * 9000).toString();
 
-    const query = `
-      INSERT INTO parcels (sender_id, category, weight_kg, pickup_address, drop_address, receiver_name, receiver_phone, delivery_fee, pickup_otp, delivery_otp, status)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'requested')
-      RETURNING *;
-    `;
-    const values = [sender_id, category, weight_kg, pickup_address, drop_address, receiver_name, receiver_phone, delivery_fee, pickup_otp, delivery_otp];
-    const result = await pool.query(query, values);
-    res.json({ success: true, parcel: result.rows[0] });
+    const parcel = await Order.create({
+      sender_id, category, weight_kg, pickup_address, drop_address,
+      receiver_name, receiver_phone, delivery_fee, pickup_otp, delivery_otp, status: 'requested'
+    });
+    res.json({ success: true, parcel });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -73,8 +105,8 @@ app.post('/api/parcels/create', async (req, res) => {
 
 app.get('/api/sender/orders', async (req, res) => {
   try {
-    const result = await pool.query("SELECT * FROM orders ORDER BY created_at DESC;");
-    res.json({ success: true, orders: result.rows });
+    const orders = await Order.find().sort({ createdAt: -1 });
+    res.json({ success: true, orders });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -83,14 +115,13 @@ app.get('/api/sender/orders', async (req, res) => {
 app.post('/api/parcels/cancel', async (req, res) => {
   try {
     const parcel_id = req.body.parcel_id ? req.body.parcel_id.trim() : "";
-    const check = await pool.query("SELECT status FROM orders WHERE id = $1;", [parcel_id]);
-    if (check.rows.length === 0) return res.status(404).json({ success: false, error: 'पार्सल नहीं मिला' });
-    
-    if (check.rows[0].status !== 'requested') {
+    const parcel = await Order.findById(parcel_id);
+    if (!parcel) return res.status(404).json({ success: false, error: 'पार्सल नहीं मिला' });
+    if (parcel.status !== 'requested') {
       return res.status(400).json({ success: false, error: 'राइडर द्वारा स्वीकार या पिक किए गए पार्सल को कैंसिल नहीं किया जा सकता।' });
     }
-
-    await pool.query("UPDATE orders SET status = 'cancelled' WHERE id = $1;", [parcel_id]);
+    parcel.status = 'cancelled';
+    await parcel.save();
     res.json({ success: true, message: 'पार्सल सफलतापूर्वक कैंसिल कर दिया गया।' });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -100,9 +131,9 @@ app.post('/api/parcels/cancel', async (req, res) => {
 app.get('/api/parcels/track/:id', async (req, res) => {
   try {
     const parcelId = req.params.id.trim();
-    const result = await pool.query("SELECT * FROM orders WHERE id = $1;", [parcelId]);
-    if (result.rows.length === 0) return res.status(404).json({ success: false, error: 'Parcel नहीं मिला' });
-    res.json({ success: true, parcel: result.rows[0] });
+    const parcel = await Order.findById(parcelId);
+    if (!parcel) return res.status(404).json({ success: false, error: 'Parcel नहीं मिला' });
+    res.json({ success: true, parcel });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -110,8 +141,8 @@ app.get('/api/parcels/track/:id', async (req, res) => {
 
 app.get('/api/parcels/available', async (req, res) => {
   try {
-    const result = await pool.query("SELECT * FROM orders WHERE status = 'requested' ORDER BY created_at DESC;");
-    res.json({ success: true, parcels: result.rows });
+    const parcels = await Order.find({ status: 'requested' }).sort({ createdAt: -1 });
+    res.json({ success: true, parcels });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -119,8 +150,8 @@ app.get('/api/parcels/available', async (req, res) => {
 
 app.get('/api/rider/active-tasks', async (req, res) => {
   try {
-    const result = await pool.query("SELECT * FROM orders WHERE status IN ('accepted', 'in_transit') ORDER BY created_at DESC;");
-    res.json({ success: true, tasks: result.rows });
+    const tasks = await Order.find({ status: { $in: ['accepted', 'in_transit'] } }).sort({ createdAt: -1 });
+    res.json({ success: true, tasks });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -129,7 +160,7 @@ app.get('/api/rider/active-tasks', async (req, res) => {
 app.post('/api/parcels/accept', async (req, res) => {
   try {
     const parcel_id = req.body.parcel_id ? req.body.parcel_id.trim() : "";
-    await pool.query("UPDATE orders SET status = 'accepted' WHERE id = $1;", [parcel_id]);
+    await Order.findByIdAndUpdate(parcel_id, { status: 'accepted' });
     res.json({ success: true, message: 'पार्सल स्वीकार कर लिया गया! अब पिकअप के लिए रवाना हों।' });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -140,13 +171,11 @@ app.post('/api/parcels/verify-pickup', async (req, res) => {
   try {
     const parcel_id = req.body.parcel_id ? req.body.parcel_id.trim() : "";
     const otp = req.body.otp ? req.body.otp.trim() : "";
-    const result = await pool.query("SELECT * FROM orders WHERE id = $1;", [parcel_id]);
-    if (result.rows.length === 0) return res.status(404).json({ success: false, error: 'पार्सल नहीं मिला' });
-
-    const parcel = result.rows[0];
+    const parcel = await Order.findById(parcel_id);
+    if (!parcel) return res.status(404).json({ success: false, error: 'पार्सल नहीं मिला' });
     if (parcel.pickup_otp !== otp) return res.status(400).json({ success: false, error: 'अमान्य पिकअप OTP' });
-
-    await pool.query("UPDATE orders SET status = 'in_transit' WHERE id = $1;", [parcel_id]);
+    parcel.status = 'in_transit';
+    await parcel.save();
     res.json({ success: true, message: '✓ पिकअप वेरिफाई हुआ! पार्सल अब ट्रांज़िट में है।' });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -157,14 +186,12 @@ app.post('/api/parcels/verify-delivery', async (req, res) => {
   try {
     const parcel_id = req.body.parcel_id ? req.body.parcel_id.trim() : "";
     const otp = req.body.otp ? req.body.otp.trim() : "";
-    const result = await pool.query("SELECT * FROM orders WHERE id = $1;", [parcel_id]);
-    if (result.rows.length === 0) return res.status(404).json({ success: false, error: 'पार्सल नहीं मिला' });
-
-    const parcel = result.rows[0];
+    const parcel = await Order.findById(parcel_id);
+    if (!parcel) return res.status(404).json({ success: false, error: 'पार्सल नहीं मिला' });
     if (parcel.status !== 'in_transit') return res.status(400).json({ success: false, error: 'पार्सल अभी ट्रांज़िट में नहीं है' });
     if (parcel.delivery_otp !== otp) return res.status(400).json({ success: false, error: 'अमान्य डिलीवरी OTP' });
-
-    await pool.query("UPDATE orders SET status = 'delivered' WHERE id = $1;", [parcel_id]);
+    parcel.status = 'delivered';
+    await parcel.save();
     res.json({ success: true, message: `🎉 डिलीवरी सफल! ₹${parcel.delivery_fee} का भुगतान प्रोसेस हुआ।` });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -174,7 +201,7 @@ app.post('/api/parcels/verify-delivery', async (req, res) => {
 app.post('/api/parcels/rate', async (req, res) => {
   try {
     const { parcel_id, rating, feedback } = req.body;
-    await pool.query("UPDATE orders SET rating = $1, feedback = $2 WHERE id = $3;", [rating, feedback, parcel_id]);
+    await Order.findByIdAndUpdate(parcel_id, { rating, feedback });
     res.json({ success: true, message: 'रेटिंग दर्ज हो गई!' });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -183,8 +210,7 @@ app.post('/api/parcels/rate', async (req, res) => {
 
 app.get('/api/rider/wallet', async (req, res) => {
   try {
-    const deliveredResult = await pool.query("SELECT * FROM orders WHERE status = 'delivered' ORDER BY created_at DESC;");
-    const parcels = deliveredResult.rows;
+    const parcels = await Order.find({ status: 'delivered' }).sort({ createdAt: -1 });
     const totalEarnings = parcels.reduce((sum, item) => sum + Number(item.delivery_fee || 0), 0);
     res.json({ success: true, totalEarnings, completedCount: parcels.length, history: parcels });
   } catch (err) {
@@ -192,113 +218,83 @@ app.get('/api/rider/wallet', async (req, res) => {
   }
 });
 
-// डिजिटल इनवॉइस / रसीद जनरेटर (HTML to Print/PDF)
-app.get('/api/invoice/:id', async (req, res) => {
+app.get('/api/wallet/:userId', async (req, res) => {
   try {
-    const parcelId = req.params.id.trim();
-    const result = await pool.query("SELECT * FROM orders WHERE id = $1;", [parcelId]);
-    if (result.rows.length === 0) return res.status(404).send('<h1>इनवॉइस नहीं मिली</h1>');
-
-    const p = result.rows[0];
-    const orderDate = p.created_at ? new Date(p.created_at).toLocaleDateString('hi-IN', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'N/A';
-
-    const invoiceHtml = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta charset="utf-8">
-        <title>RelayRoute इनवॉइस #${p.id.slice(0, 8)}</title>
-        <style>
-          body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 24px; color: #1F2937; background: #FFF; }
-          .invoice-box { max-width: 600px; margin: auto; border: 1px solid #E5E7EB; border-radius: 12px; padding: 24px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
-          .header { display: flex; justify-content: space-between; border-bottom: 2px solid #4F46E5; padding-bottom: 16px; margin-bottom: 20px; }
-          .brand { font-size: 24px; font-weight: bold; color: #4F46E5; }
-          .tagline { font-size: 11px; color: #6B7280; }
-          .status { background: #ECFDF5; color: #059669; padding: 6px 12px; border-radius: 20px; font-weight: bold; font-size: 13px; align-self: flex-start; }
-          .section { margin-bottom: 16px; }
-          .section-title { font-size: 12px; font-weight: bold; color: #6B7280; text-transform: uppercase; margin-bottom: 6px; }
-          .detail-row { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 14px; }
-          .total-box { background: #F9FAFB; border-radius: 8px; padding: 14px; margin-top: 20px; border: 1px dashed #D1D5DB; }
-          .print-btn { display: block; width: 100%; text-align: center; background: #4F46E5; color: white; padding: 12px; border-radius: 8px; font-weight: bold; text-decoration: none; margin-top: 20px; border: none; cursor: pointer; }
-          @media print { .print-btn { display: none; } }
-        </style>
-      </head>
-      <body>
-        <div class="invoice-box">
-          <div class="header">
-            <div>
-              <div class="brand">RelayRoute</div>
-              <div class="tagline">पीयर-टू-पीयर सुरक्षित पार्सल नेटवर्क</div>
-            </div>
-            <div class="status">✓ ${p.status.toUpperCase()}</div>
-          </div>
-
-          <div class="section">
-            <div class="detail-row"><span><b>रसीद संख्या:</b></span><span>#${p.id.slice(0, 13)}</span></div>
-            <div class="detail-row"><span><b>तारीख व समय:</b></span><span>${orderDate}</span></div>
-          </div>
-
-          <hr style="border: 0; border-top: 1px solid #E5E7EB; margin: 16px 0;">
-
-          <div class="section">
-            <div class="section-title">डिलीवरी रूट विवरण</div>
-            <div class="detail-row"><span><b>पिकअप पता:</b></span><span>${p.pickup_address}</span></div>
-            <div class="detail-row"><span><b>ड्रॉप पता:</b></span><span>${p.drop_address}</span></div>
-            <div class="detail-row"><span><b>प्राप्तकर्ता:</b></span><span>${p.receiver_name} (${p.receiver_phone})</span></div>
-            <div class="detail-row"><span><b>पार्सल प्रकार / वजन:</b></span><span>${p.category} (${p.weight_kg} kg)</span></div>
-          </div>
-
-          <div class="total-box">
-            <div class="detail-row"><span>बेस डिलीवरी शुल्क:</span><span>₹50.00</span></div>
-            <div class="detail-row"><span>वजन आधारित किराया:</span><span>₹${(Number(p.delivery_fee) - 50).toFixed(2)}</span></div>
-            <div class="detail-row" style="font-size: 16px; font-weight: bold; color: #111827; border-top: 1px solid #E5E7EB; padding-top: 8px; margin-top: 8px;">
-              <span>कुल भुगतान (UPI):</span>
-              <span style="color: #059669;">₹${Number(p.delivery_fee).toFixed(2)}</span>
-            </div>
-          </div>
-
-          <button class="print-btn" onclick="window.print()">🖨️ रसीद प्रिंट / PDF सेव करें</button>
-        </div>
-      </body>
-      </html>
-    `;
-    res.send(invoiceHtml);
+    const { userId } = req.params;
+    let wallet = await Wallet.findOne({ user_id: userId });
+    if (!wallet) {
+      wallet = await Wallet.create({ user_id: userId, balance: 0.00 });
+    }
+    res.json({ success: true, balance: wallet.balance });
   } catch (err) {
-    res.status(500).send("Invoice error: " + err.message);
+    res.status(500).json({ success: false, message: 'Database error' });
   }
 });
 
-// एडमिन ऑपरेशन्स
-app.get('/admin/cleanup', async (req, res) => {
+app.post('/api/wallet/update', async (req, res) => {
   try {
-    await pool.query("DELETE FROM orders WHERE status IN ('delivered', 'cancelled');");
-    res.redirect('/admin');
-  } catch (err) {
-    res.status(500).send("Cleanup error: " + err.message);
-  }
-});
-
-app.get('/admin/add-sample', async (req, res) => {
-  try {
-    const userRes = await pool.query("SELECT id FROM users LIMIT 1;");
-    const uid = userRes.rows[0] ? userRes.rows[0].id : null;
-    const pOtp = Math.floor(1000 + Math.random() * 9000).toString();
-    const dOtp = Math.floor(1000 + Math.random() * 9000).toString();
-    await pool.query(
-      `INSERT INTO parcels (sender_id, category, weight_kg, pickup_address, drop_address, receiver_name, receiver_phone, delivery_fee, pickup_otp, delivery_otp, status)
-       VALUES ($1, 'इलेक्ट्रॉनिक्स (Electronics)', 1.5, 'कनॉट प्लेस, नई दिल्ली', 'सेक्टर 18, नोएडा', 'रोहित वर्मा', '9811122233', 110, $2, $3, 'requested');`,
-      [uid, pOtp, dOtp]
+    const { userId, amount, type } = req.body;
+    let wallet = await Wallet.findOne({ user_id: userId });
+    let currentBalance = wallet ? wallet.balance : 0.00;
+    let newBalance = currentBalance;
+    if (type === 'credit') {
+      newBalance += parseFloat(amount);
+    } else if (type === 'debit') {
+      if (currentBalance < amount) {
+        return res.status(400).json({ success: false, message: 'Insufficient balance' });
+      }
+      newBalance -= parseFloat(amount);
+    }
+    wallet = await Wallet.findOneAndUpdate(
+      { user_id: userId },
+      { balance: newBalance },
+      { upsert: true, new: true }
     );
-    res.redirect('/admin');
+    res.json({ success: true, balance: wallet.balance });
   } catch (err) {
-    res.status(500).send("Sample error: " + err.message);
+    res.status(500).json({ success: false, message: 'Database error' });
+  }
+});
+
+app.post('/api/rider/location', async (req, res) => {
+  try {
+    const { rider_id, parcel_id, latitude, longitude } = req.body;
+    await RiderLocation.findOneAndUpdate(
+      { rider_id },
+      { parcel_id, latitude, longitude },
+      { upsert: true, new: true }
+    );
+    res.json({ success: true, message: 'Location updated successfully' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/parcels/location/:id', async (req, res) => {
+  try {
+    const parcelId = req.params.id;
+    const location = await RiderLocation.findOne({ parcel_id: parcelId }).sort({ updatedAt: -1 });
+    if (!location) return res.status(404).json({ success: false, message: 'Location not found' });
+    res.json({ success: true, location });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/payment/upi', async (req, res) => {
+  try {
+    const { user_id, amount, upi_id, parcel_id } = req.body;
+    const transactionId = 'UPI_' + Date.now();
+    await Payment.create({ user_id, parcel_id, amount, upi_id, transaction_id: transactionId, status: 'SUCCESS' });
+    res.json({ success: true, message: 'UPI Payment successful', transaction_id: transactionId });
+  } catch (err) {
+    res.status(500).json({ success: false, error: 'Payment processing error' });
   }
 });
 
 app.get('/admin', async (req, res) => {
   try {
-    const all = await pool.query("SELECT * FROM orders ORDER BY created_at DESC;");
-    const parcels = all.rows;
+    const parcels = await Order.find().sort({ createdAt: -1 });
     const total = parcels.length;
     const active = parcels.filter(p => ['requested', 'accepted', 'in_transit'].includes(p.status)).length;
     const delivered = parcels.filter(p => p.status === 'delivered').length;
@@ -313,13 +309,13 @@ app.get('/admin', async (req, res) => {
 
       return `
         <tr style="border-bottom: 1px solid #E5E7EB; text-align: left;">
-          <td style="padding: 10px; font-family: monospace; font-size: 11px;">${p.id.slice(0, 8)}...</td>
+          <td style="padding: 10px; font-family: monospace; font-size: 11px;">${p._id.toString().slice(-8)}...</td>
           <td style="padding: 10px;">${p.category}</td>
           <td style="padding: 10px;"><b>${p.pickup_address}</b> &rarr; ${p.drop_address}</td>
           <td style="padding: 10px;">${p.receiver_name} (${p.receiver_phone})</td>
           <td style="padding: 10px; font-weight: bold; color: #059669;">₹${p.delivery_fee}</td>
           <td style="padding: 10px;"><span style="background: ${badgeBg}; color: ${badgeColor}; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: bold;">${p.status.toUpperCase()}</span></td>
-          <td style="padding: 10px; font-size: 12px;">P: <b>${p.pickup_otp}</b> \vert{} D: <b>${p.delivery_otp}</b></td>
+          <td style="padding: 10px; font-size: 12px;">P: <b>${p.pickup_otp}</b> | D: <b>${p.delivery_otp}</b></td>
         </tr>
       `;
     }).join('');
@@ -352,7 +348,7 @@ app.get('/admin', async (req, res) => {
           <div class="header">
             <div>
               <h2 style="margin: 0;">RelayRoute लाइव एडमिन कंट्रोल</h2>
-              <p style="margin: 4px 0 0 0; opacity: 0.8; font-size: 13px;">बैकएंड डेटाबेस लाइव मॉनिटरिंग</p>
+              <p style="margin: 4px 0 0 0; opacity: 0.8; font-size: 13px;">MongoDB Cloud Database मॉनिटरिंग</p>
             </div>
             <div class="btn-group">
               <a href="/admin/add-sample" class="btn btn-add">+ नया टेस्ट पार्सल</a>
@@ -387,184 +383,5 @@ app.get('/admin', async (req, res) => {
   }
 });
 
-const PORT = 5000;
-app.listen(PORT, () => console.log(`🚀 Server running on http://localhost:${PORT}`));
-const PDFDocument = require('pdfkit');
-
-// PDF Invoice Route
-app.get('/api/invoice/:orderId', async (req, res) => {
-    try {
-        const orderId = req.params.orderId;
-        // आप चाहें तो यहाँ Neon database से आर्डर की पूरी डिटेल्स फेच कर सकते हैं
-
-        const doc = new PDFDocument();
-        res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader('Content-Disposition', `attachment; filename=invoice-${orderId}.pdf`);
-
-        doc.pipe(res);
-
-        // PDF Design & Content
-        doc.fontSize(22).text('RelayRoute Invoice', { align: 'center' });
-        doc.moveDown();
-        doc.fontSize(14).text(`Order ID: ${orderId}`);
-        doc.text(`Date: ${new Date().toLocaleDateString()}`);
-        doc.text('Status: Paid / Success');
-        doc.moveDown();
-        doc.text('Thank you for using RelayRoute!');
-
-        doc.end();
-    } catch (err) {
-        console.error(err);
-        res.status(500).send('Error generating PDF invoice');
-    }
-});
-// Live GPS Location Endpoint
-app.post('/api/update-location', (req, res) => {
-    const { latitude, longitude } = req.body;
-    console.log(`Live Location Received -> Lat: ${latitude}, Lng: ${longitude}`);
-    res.json({ success: true, message: 'Location updated successfully' });
-});
-// 1. Notification Endpoint
-app.post('/api/send-notification', (req, res) => {
-    const { userId, message, title } = req.body;
-    console.log(`Notification sent to User ${userId}: [${title}] ${message}`);
-    // Yahan aap Firebase Cloud Messaging (FCM) ya Web Push integrate kar sakte hain
-    res.json({ success: true, message: 'Notification sent successfully' });
-});
-
-// 2. Wallet & Payment Balance Endpoint
-let userWallets = {}; // Temporary memory storage (Neon DB se bhi connect kar sakte hain)
-
-app.post('/api/wallet/update', (req, res) => {
-    const { userId, amount, type } = req.body; // type: 'credit' ya 'debit'
-    if (!userWallets[userId]) userWallets[userId] = 0.00;
-
-    if (type === 'credit') {
-        userWallets[userId] += parseFloat(amount);
-    } else if (type === 'debit') {
-        if (userWallets[userId] < amount) {
-            return res.status(400).json({ success: false, message: 'Insufficient balance' });
-        }
-        userWallets[userId] -= parseFloat(amount);
-    }
-
-    console.log(`Wallet Updated for User ${userId}. Current Balance: ${userWallets[userId]}`);
-    res.json({ success: true, balance: userWallets[userId] });
-});
-
-app.get('/api/wallet/:userId', (req, res) => {
-    const userId = req.params.userId;
-    const balance = userWallets[userId] || 0.00;
-    res.json({ success: true, balance: balance });
-});
-// 1. Get Real Wallet Balance from Neon DB
-app.get('/api/wallet/:userId', async (req, res) => {
-    try {
-        const { userId } = req.params;
-        const result = await pool.query('SELECT balance FROM wallets WHERE user_id = $1', [userId]);
-        
-        if (result.rows.length === 0) {
-            await pool.query('INSERT INTO wallets (user_id, balance) VALUES ($1, $2)', [userId, 0.00]);
-            return res.json({ success: true, balance: 0.00 });
-        }
-        
-        res.json({ success: true, balance: parseFloat(result.rows[0].balance) });
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ success: false, message: 'Database error' });
-    }
-});
-
-// 2. Update Real Wallet Balance in Neon DB
-app.post('/api/wallet/update', async (req, res) => {
-    try {
-        const { userId, amount, type } = req.body;
-        
-        let checkUser = await pool.query('SELECT balance FROM wallets WHERE user_id = $1', [userId]);
-        let currentBalance = checkUser.rows.length > 0 ? parseFloat(checkUser.rows[0].balance) : 0.00;
-
-        let newBalance = currentBalance;
-        if (type === 'credit') {
-            newBalance += parseFloat(amount);
-        } else if (type === 'debit') {
-            if (currentBalance < amount) {
-                return res.status(400).json({ success: false, message: 'Insufficient balance' });
-            }
-            newBalance -= parseFloat(amount);
-        }
-
-        await pool.query(
-            `INSERT INTO wallets (user_id, balance, updated_at) 
-             VALUES ($1, $2, CURRENT_TIMESTAMP) 
-             ON CONFLICT (user_id) 
-             DO UPDATE SET balance = $2, updated_at = CURRENT_TIMESTAMP`,
-            [userId, newBalance]
-        );
-
-        res.json({ success: true, balance: newBalance });
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ success: false, message: 'Database error' });
-    }
-});
-
-// 1. Live Map Tracking: Update Rider Location
-app.post('/api/rider/location', async (req, res) => {
-    try {
-        const { rider_id, parcel_id, latitude, longitude } = req.body;
-        await pool.query(
-            `INSERT INTO rider_locations (rider_id, parcel_id, latitude, longitude, updated_at)
-             VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
-             ON CONFLICT (rider_id)
-             DO UPDATE SET latitude = $3, longitude = $4, parcel_id = $2, updated_at = CURRENT_TIMESTAMP`,
-            [rider_id, parcel_id, latitude, longitude]
-        );
-        res.json({ success: true, message: 'Location updated successfully' });
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ success: false, message: 'Database error' });
-    }
-});
-
-// 2. Live Map Tracking: Get Rider/Parcel Location
-app.get('/api/parcels/location/:id', async (req, res) => {
-    try {
-        const parcelId = req.params.id;
-        const result = await pool.query(
-            `SELECT * FROM rider_locations WHERE parcel_id = $1 ORDER BY updated_at DESC LIMIT 1`,
-            [parcelId]
-        );
-        if (result.rows.length === 0) {
-            return res.status(404).json({ success: false, message: 'Location not found' });
-        }
-        res.json({ success: true, location: result.rows[0] });
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ success: false, message: 'Database error' });
-    }
-});
-
-// 3. Online UPI Payment Integration Endpoint
-app.post('/api/payment/upi', async (req, res) => {
-    try {
-        const { user_id, amount, upi_id, parcel_id } = req.body;
-        // Mocking UPI payment gateway verification
-        const transactionId = 'UPI_' + Date.now();
-        
-        // Log payment in database
-        await pool.query(
-            `INSERT INTO payments (user_id, parcel_id, amount, upi_id, transaction_id, status, created_at)
-             VALUES ($1, $2, $3, $4, $5, 'SUCCESS', CURRENT_TIMESTAMP)`,
-            [user_id, parcel_id, amount, upi_id, transactionId]
-        );
-
-        res.json({ 
-            success: true, 
-            message: 'UPI Payment successful', 
-            transaction_id: transactionId 
-        });
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ success: false, message: 'Payment processing error' });
-    }
-});
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
